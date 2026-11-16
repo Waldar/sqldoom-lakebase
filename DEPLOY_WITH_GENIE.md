@@ -17,6 +17,7 @@ Ask these together, with the defaults shown, and wait for the answers:
    * create the Lakebase project (Postgres 17, default endpoint size 24 CU; during the map load the main endpoint runs at 8 CU, then 1 CU);
    * create the Databricks App (Medium) with the project's database as its resource;
    * grant the app's service principal the Postgres role `doom_owner` and **Can manage** on the Lakebase project (the app creates and deletes one branch per game);
+   * create the `game-template` branch after the app, or, if it already exists without the app's database login, add that login there (role, `doom_owner`, CONNECT and CREATE on the database);
    * edit `app.yaml` in the cloned folder and deploy the app from that folder.
 
 If a tool refuses one of these changes (for example a permission grant), stop and tell the user which change and why. Retry it only after they confirm.
@@ -36,10 +37,10 @@ ROOT = "/Workspace/Users/<user>/sqldoom-lakebase"
 sys.path[:0] = [ROOT, ROOT + "/sqldoom"]
 from setup_workspace import Setup
 s = Setup(project="<project id>", app="<app name>", wad="<volume path of DOOM1.WAD>")
-s.run(until="template")
+s.run(until="sql")
 ```
 
-Expected: one `[setup] --- <step>` line per step (project, compute, database, maps, owner, sql, template), the loader's progress during `maps`, then `[frozen] differs: nothing` and `[setup] all done in ... s`. Normal lines that are not errors: `postgres_compat.sql before the load: relation "mp_players" does not exist (empty schema)` and `translator fixes skipped during the load ...: doom_cs_monster_step`.
+Expected: one `[setup] --- <step>` line per step (project, compute, database, maps, owner, sql), the loader's progress during `maps`, then `[frozen] differs: nothing` and `[setup] all done in ... s`. Normal lines that are not errors: `postgres_compat.sql before the load: relation "mp_players" does not exist (empty schema)` and `translator fixes skipped during the load ...: doom_cs_monster_step`.
 
 ## 3. App part
 
@@ -47,7 +48,9 @@ Expected: one `[setup] --- <step>` line per step (project, compute, database, ma
 s.run(start="app")
 ```
 
-This creates the app with its Lakebase resource (or adds the resource to an existing app of that name), waits for the service principal's Postgres role, grants it `doom_owner` and Can manage on the project, points `app.yaml` at the project, and sizes the main endpoint down to 1 CU.
+This creates the app with its Lakebase resource (or adds the resource to an existing app of that name), waits for the service principal's Postgres role, grants it `doom_owner` and Can manage on the project, **then** creates the `game-template` branch, points `app.yaml` at the project, and sizes the main endpoint down to 1 CU.
+
+The order matters: Lakebase roles are per branch, and a branch copies its parent's roles only when it is created. `game-template` (and every game branch, copied from it) must be created after the app's role exists on the default branch, or the app cannot log in to it. If `game-template` already exists without the app's login (a setup run in the older order), the template step adds the login, its `doom_owner` membership and CONNECT and CREATE on the database, as on the default branch. That is a permission change: include it in the confirmation of step 0.
 
 If your tools do not let code create an app, create it with your own app tool instead (name as agreed, Medium), then run `s.run(start="app")` again: the step finds the app and adds what is missing.
 
@@ -78,11 +81,12 @@ Give the user the app URL (printed by `status()`), and tell them to give players
 
 | Message | What to do |
 | --- | --- |
-| `... DOOM1.WAD: no such file` | Ask the user for the right volume path, then `s.run(start="maps", until="template")` |
+| `... DOOM1.WAD: no such file` | Ask the user for the right volume path, then `s.run(start="maps", until="sql")` |
+| Starting a game: `template not available: ... password authentication failed for user '<app id>'` | `game-template` was made before the app and has no login for it: `s.run(steps=["template"])` (adds it, see step 3), then start a game again. An app deployed from this repository since 2026-11-16 retries the template on the next game; an older deployment must be redeployed (or restarted) first |
 | `setup_doom_owner.sql part 1 left ...: rolled back` | Something in schema `doom` is owned by another role; show the user the counts |
 | `after apply, still different from sql_frozen/` | Run `s.status()` and report the counts; do not edit `sql_frozen/` |
 | `Postgres role <id> of the app's service principal did not appear` | The app's Lakebase resource is missing or still being created; check the app's resources, then `s.run(start="app")` |
 | App deploy: `not in RUNNING state` | Do not retry the deploy: `apps get`, then start the app or wait, as in step 4 |
 | In the app logs: `template refresh failed` or `frame views missing on this branch` | The app applies `sql_frozen/` to `game-template` at each start; report the log lines around it and `s.status()` to the user |
 
-Tested end to end for the database part on a new Lakebase project (2026-11-13: 53 s, then played on a game branch). The app part and the deploy were written from the live app's setup but have not run on a new workspace yet.
+Tested end to end for the database part on a new Lakebase project (2026-11-13: 53 s, then played on a game branch). First run in another workspace (2026-11-16): deployed, but games failed because `game-template` was made before the app (fixed by the order above; the repair of an existing template has not run yet).

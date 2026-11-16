@@ -154,6 +154,7 @@ class GameManager:
         self._lock = threading.Lock()
         self._games = {}                     # game_id -> Game (live ones)
         self._template_ready = threading.Event()
+        self._template_retry = threading.Lock()
         self.template_state = "unknown"
         self._stop = threading.Event()
         self._threads = []
@@ -405,6 +406,14 @@ class GameManager:
         from databricks.sdk.service import postgres as P
         from databricks.sdk.service.postgres import Duration, FieldMask
         try:
+            if self.template_state.startswith("failed"):
+                # Once more before giving up: a template fixed after the app
+                # started (e.g. the app's login added to it) works without a
+                # restart. One retry at a time.
+                with self._template_retry:
+                    if self.template_state.startswith("failed"):
+                        self._save(g, step="updating the levels")
+                        self._refresh_template()
             if not self._template_ready.is_set():
                 self._save(g, step="updating the levels")
                 while not self._template_ready.wait(2.0):

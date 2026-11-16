@@ -9,7 +9,7 @@ see setup_notebook.py, or from a laptop signed in with `databricks auth login`.
     s = Setup(project="sqldoom", app="sqldoom-ltap",
               wad="/Volumes/<catalog>/<schema>/wad/DOOM1.WAD")
     s.run()                 # every step below, in order
-    s.run(until="template") # only the database part
+    s.run(until="sql")      # only the database part
 
 Steps (Setup.STEPS):
   project     Lakebase project (Postgres 17), default endpoint size 24 CU
@@ -22,9 +22,16 @@ Steps (Setup.STEPS):
               schema, schema lobby
   sql         table_settings.sql, then sql_frozen/ applied (doomapp/frozen.py)
               and checked
-  template    branch game-template from the default branch, no expiry
   app         the Databricks App with its Lakebase resource; its service
               principal is granted doom_owner and Can manage on the project
+  template    branch game-template from the default branch, no expiry. After
+              the app: Lakebase roles are per branch and a branch copies the
+              roles of its parent when it is created, so the app's role must
+              exist before the template is made (a template made first has no
+              login for the app: "password authentication failed for user
+              '<app id>'", found 2026-11-16 in another workspace). An existing
+              template without the app's role gets it (role, doom_owner,
+              CONNECT and CREATE, as on the default branch).
   config      app.yaml points at this project
   shrink      the default branch's primary back to 1 CU (lobby only)
 
@@ -53,7 +60,7 @@ def log(msg):
 
 
 class Setup:
-    STEPS = ("project", "compute", "database", "maps", "owner", "sql", "template", "app", "config", "shrink")
+    STEPS = ("project", "compute", "database", "maps", "owner", "sql", "app", "template", "config", "shrink")
 
     def __init__(self, project="sqldoom", app="sqldoom-ltap", wad=None, maps=MAPS,
                  db="databricks_postgres", schema="doom", role="doom_owner", template="game-template",
@@ -295,18 +302,57 @@ class Setup:
         if left:
             raise RuntimeError(f"after apply, still different from sql_frozen/: {left}")
 
+    def _app_role(self, branch):
+        """The Lakebase role of the app's service principal on a branch, or None."""
+        sp = self.w.apps.get(name=self.app_name).service_principal_client_id
+        for r in self.w.postgres.list_roles(parent=branch):
+            if r.status and r.status.postgres_role == sp:
+                return sp, r
+        return sp, None
+
     def step_template(self):
         from databricks.sdk.service import postgres as P
         name = f"{self.project}/branches/{self.template}"
         try:
             self.w.postgres.get_branch(name=name)
-            log(f"{name} exists (the app refreshes it from sql_frozen/ at start)")
-            return
+            exists = True
         except Exception:
-            pass
-        self.w.postgres.create_branch(parent=self.project, branch_id=self.template, branch=P.Branch(
-            spec=P.BranchSpec(source_branch=self.branch, no_expiry=True))).wait()
-        log(f"{name} created from {self.branch}, no expiry")
+            exists = False
+        if not exists:
+            self.w.postgres.create_branch(parent=self.project, branch_id=self.template, branch=P.Branch(
+                spec=P.BranchSpec(source_branch=self.branch, no_expiry=True))).wait()
+            log(f"{name} created from {self.branch}, no expiry")
+        # The app logs in to the template (refresh) and to every game branch
+        # (copies of it): its role must be there.
+        try:
+            sp, role = self._app_role(name)
+        except Exception as exc:
+            log(f"app {self.app_name} not found ({str(exc).splitlines()[0]}): run step app, then this step again")
+            return
+        if role is not None:
+            log(f"{name}: {'' if exists else 'new, '}has the app's login ({sp})")
+            return
+        _, src = self._app_role(self.branch)
+        if src is None:
+            raise RuntimeError(f"the app's role {sp} is not on {self.branch} either: run step app first")
+        log(f"{name} has no login for the app ({sp}, made before the app): adding it")
+        self.w.postgres.create_role(parent=name, role_id=src.status.role_id, role=P.Role(spec=P.RoleRoleSpec(
+            identity_type=src.status.identity_type, auth_method=src.status.auth_method, postgres_role=sp))).wait()
+        ep = list(self.w.postgres.list_endpoints(parent=name))[0].name
+        conn = self.connect(endpoint=ep)
+        try:
+            with conn.cursor() as cur:
+                for _ in range(30):
+                    cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (sp,))
+                    if cur.fetchone():
+                        break
+                    time.sleep(2)
+                cur.execute(f'GRANT {self.role} TO "{sp}" WITH INHERIT TRUE, SET TRUE')
+                cur.execute(f'GRANT CONNECT, CREATE ON DATABASE {self.db} TO "{sp}"')
+        finally:
+            conn.close()
+        log(f"{name}: app login {sp} added, member of {self.role}, CONNECT and CREATE on {self.db}. "
+            "If the app is running, restart it (or deploy) so it retries the template")
 
     def step_app(self):
         from databricks.sdk.service import apps as A
@@ -409,8 +455,13 @@ class Setup:
             return not left, f"{where} differs from sql_frozen/: {left or 'nothing'}"
 
         def template():
-            self.w.postgres.get_branch(name=f"{self.project}/branches/{self.template}")
-            return True, f"{self.template} exists"
+            name = f"{self.project}/branches/{self.template}"
+            self.w.postgres.get_branch(name=name)
+            try:
+                sp, role = self._app_role(name)
+            except Exception:
+                return True, f"{self.template} exists (no app yet to check its login)"
+            return role is not None, f"{self.template} exists, app login {sp}: {'yes' if role else 'NO (run step template)'}"
 
         def app():
             a = self.w.apps.get(name=self.app_name)
@@ -425,7 +476,7 @@ class Setup:
                                               f"{self.role} {'yes' if member else 'no'}, Can manage {'yes' if manage else 'no'}, {a.url}")
 
         results = [check(n, f) for n, f in (("project", project), ("maps", maps), ("owner", owner), ("sql", sql),
-                                            ("template", template), ("app", app))]
+                                            ("app", app), ("template", template))]
         return all(results)
 
     # ------------------------------------------------------------ run

@@ -106,7 +106,9 @@ frozen.main(["apply", ep]); frozen.main(["check", ep])
 
 `apply` creates or replaces the 125 functions, 2 aggregates, 19 views, 7 materialized views, 15 indexes and the 180 per-map, per-player frame views, in one transaction (all or nothing). It runs as `doom_owner` (`DOOM_DB_ROLE`, default `doom_owner`). A second `check` right after should find nothing to change.
 
-## 7. The template branch
+## 7. The template branch (after the app: do step 8 first)
+
+> Create `game-template` only once the app exists (step 8, at least items 1-3). Lakebase roles are per branch and a new branch copies its parent's roles when it is created: a template made before the app has no database login for the app, and every game then fails with `template not available: ... password authentication failed for user '<app id>'` (found 2026-11-16 on the first deployment in another workspace). `setup_workspace.py` runs the steps in that order, and its template step adds the missing login to a template made too early (`Setup(...).run(steps=["template"])`).
 
 Create `game-template` from `production`, **with no expiry**, in a notebook:
 
@@ -223,6 +225,7 @@ The referee (`doomapp/referee.py`) runs upstream `doom_server` through the `run_
 | --- | --- |
 | Deploy fails with "not in RUNNING state" | Run `apps get`. `STOPPED`: `apps start`, then deploy. `STARTING`/`STOPPING`: wait and check again |
 | Page loads, no game, `permission denied` in the logs | The service principal is not a member of `doom_owner` (step 8.3) or the database resource is missing |
+| A new game fails with `template not available: ... password authentication failed for user '<app id>'` | `game-template` was made before the app (step 7 before step 8): `Setup(...).run(steps=["template"])` adds the app's login there; then redeploy or restart the app if it was deployed before 2026-11-16 |
 | A new game fails at "creating your world" | The service principal lacks Can manage on the Lakebase project (step 8.4), or `game-template` does not exist (step 7) |
 | `template refresh failed` in the logs | `sql_frozen/` could not be applied to `game-template`: run `python -m doomapp.frozen check <template endpoint>` to see what differs |
 | `frame views missing on this branch` | The template never got `sql_frozen/` (step 6, or apply it to `game-template` directly) |
