@@ -1,0 +1,19 @@
+# game data: not redistributable here
+*.WAD
+*.wad
+
+# internal project notes
+SQLDoom_CUJ.md
+
+__pycache__/
+*.pyc
+.venv/
+
+# local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+.databrickscfg
+*.pem
+*.key
+.DS_Store

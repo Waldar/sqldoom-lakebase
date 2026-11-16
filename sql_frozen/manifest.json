@@ -1,0 +1,4506 @@
+{
+ "schema": "doom",
+ "source": "PostgreSQL 17.11 (9045acd)",
+ "counts": {
+  "function": 125,
+  "aggregate": 2,
+  "view": 19,
+  "matview": 7,
+  "slot_view": 180,
+  "index": 15
+ },
+ "objects": [
+  {
+   "kind": "function",
+   "name": "api_automap()",
+   "ident": "doom.api_automap()",
+   "file": "functions/api_automap.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_automap_fit()",
+   "ident": "doom.api_automap_fit()",
+   "file": "functions/api_automap_fit.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_automap_pan(double precision,double precision)",
+   "ident": "doom.api_automap_pan(double precision,double precision)",
+   "file": "functions/api_automap_pan.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_automap_toggle(text)",
+   "ident": "doom.api_automap_toggle(text)",
+   "file": "functions/api_automap_toggle.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_automap_zoom(double precision)",
+   "ident": "doom.api_automap_zoom(double precision)",
+   "file": "functions/api_automap_zoom.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_camera(double precision)",
+   "ident": "doom.api_camera(double precision)",
+   "file": "functions/api_camera.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_input(real,real,boolean,real,boolean,integer,boolean)",
+   "ident": "doom.api_input(real,real,boolean,real,boolean,integer,boolean)",
+   "file": "functions/api_input.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_join()",
+   "ident": "doom.api_join()",
+   "file": "functions/api_join.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_set_name(text)",
+   "ident": "doom.api_set_name(text)",
+   "file": "functions/api_set_name.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_slot()",
+   "ident": "doom.api_slot()",
+   "file": "functions/api_slot.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_weapon_cycle(integer)",
+   "ident": "doom.api_weapon_cycle(integer)",
+   "file": "functions/api_weapon_cycle.sql"
+  },
+  {
+   "kind": "function",
+   "name": "api_weapon_slot(integer)",
+   "ident": "doom.api_weapon_slot(integer)",
+   "file": "functions/api_weapon_slot.sql"
+  },
+  {
+   "kind": "function",
+   "name": "bytea_larger(bytea,bytea)",
+   "ident": "doom.bytea_larger(bytea,bytea)",
+   "file": "functions/bytea_larger.sql"
+  },
+  {
+   "kind": "function",
+   "name": "bytea_smaller(bytea,bytea)",
+   "ident": "doom.bytea_smaller(bytea,bytea)",
+   "file": "functions/bytea_smaller.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_after_intermission(integer)",
+   "ident": "doom.doom_after_intermission(integer)",
+   "file": "functions/doom_after_intermission.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_attract_start()",
+   "ident": "doom.doom_attract_start()",
+   "file": "functions/doom_attract_start.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_attract_stop()",
+   "ident": "doom.doom_attract_stop()",
+   "file": "functions/doom_attract_stop.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_attract_tic()",
+   "ident": "doom.doom_attract_tic()",
+   "file": "functions/doom_attract_tic.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_automap_fit(integer,integer)",
+   "ident": "doom.doom_automap_fit(integer,integer)",
+   "file": "functions/doom_automap_fit.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_automap_pan(integer,integer,double precision,double precision)",
+   "ident": "doom.doom_automap_pan(integer,integer,double precision,double precision)",
+   "file": "functions/doom_automap_pan.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_automap_toggle(integer,integer,text)",
+   "ident": "doom.doom_automap_toggle(integer,integer,text)",
+   "file": "functions/doom_automap_toggle.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_automap_touch(integer,integer)",
+   "ident": "doom.doom_automap_touch(integer,integer)",
+   "file": "functions/doom_automap_touch.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_automap_zoom(integer,integer,double precision)",
+   "ident": "doom.doom_automap_zoom(integer,integer,double precision)",
+   "file": "functions/doom_automap_zoom.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_caller()",
+   "ident": "doom.doom_caller()",
+   "file": "functions/doom_caller.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_carry_player(integer,integer,integer,integer)",
+   "ident": "doom.doom_carry_player(integer,integer,integer,integer)",
+   "file": "functions/doom_carry_player.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cheat(integer,integer,text)",
+   "ident": "doom.doom_cheat(integer,integer,text)",
+   "file": "functions/doom_cheat.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cheat_arsenal(integer,integer)",
+   "ident": "doom.doom_cheat_arsenal(integer,integer)",
+   "file": "functions/doom_cheat_arsenal.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cheat_key(integer,integer,text)",
+   "ident": "doom.doom_cheat_key(integer,integer,text)",
+   "file": "functions/doom_cheat_key.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_const(text)",
+   "ident": "doom.doom_const(text)",
+   "file": "functions/doom_const.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_activate_specials(integer)",
+   "ident": "doom.doom_cs_activate_specials(integer)",
+   "file": "functions/doom_cs_activate_specials.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_begin(integer,integer,integer,real,real,boolean,real,boolean,integer,boolean)",
+   "ident": "doom.doom_cs_begin(integer,integer,integer,real,real,boolean,real,boolean,integer,boolean)",
+   "file": "functions/doom_cs_begin.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_boss(integer)",
+   "ident": "doom.doom_cs_boss(integer)",
+   "file": "functions/doom_cs_boss.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_clock(integer,integer)",
+   "ident": "doom.doom_cs_clock(integer,integer)",
+   "file": "functions/doom_cs_clock.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_cross(integer,integer)",
+   "ident": "doom.doom_cs_cross(integer,integer)",
+   "file": "functions/doom_cs_cross.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_death(integer,integer)",
+   "ident": "doom.doom_cs_death(integer,integer)",
+   "file": "functions/doom_cs_death.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_discover(integer,integer)",
+   "ident": "doom.doom_cs_discover(integer,integer)",
+   "file": "functions/doom_cs_discover.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_doors(integer,integer)",
+   "ident": "doom.doom_cs_doors(integer,integer)",
+   "file": "functions/doom_cs_doors.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_hitscan_apply(integer,integer,bigint)",
+   "ident": "doom.doom_cs_hitscan_apply(integer,integer,bigint)",
+   "file": "functions/doom_cs_hitscan_apply.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_hitscan_fire(integer,integer)",
+   "ident": "doom.doom_cs_hitscan_fire(integer,integer)",
+   "file": "functions/doom_cs_hitscan_fire.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_item_respawn(integer,integer)",
+   "ident": "doom.doom_cs_item_respawn(integer,integer)",
+   "file": "functions/doom_cs_item_respawn.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_attack(integer,integer)",
+   "ident": "doom.doom_cs_monster_attack(integer,integer)",
+   "file": "functions/doom_cs_monster_attack.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_barrel(integer)",
+   "ident": "doom.doom_cs_monster_barrel(integer)",
+   "file": "functions/doom_cs_monster_barrel.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_blast(integer)",
+   "ident": "doom.doom_cs_monster_blast(integer)",
+   "file": "functions/doom_cs_monster_blast.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_chase(integer,integer)",
+   "ident": "doom.doom_cs_monster_chase(integer,integer)",
+   "file": "functions/doom_cs_monster_chase.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_deaths(integer,integer)",
+   "ident": "doom.doom_cs_monster_deaths(integer,integer)",
+   "file": "functions/doom_cs_monster_deaths.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_float(integer,integer)",
+   "ident": "doom.doom_cs_monster_float(integer,integer)",
+   "file": "functions/doom_cs_monster_float.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_move(integer,integer)",
+   "ident": "doom.doom_cs_monster_move(integer,integer)",
+   "file": "functions/doom_cs_monster_move.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_noise(integer)",
+   "ident": "doom.doom_cs_monster_noise(integer)",
+   "file": "functions/doom_cs_monster_noise.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_plan(integer)",
+   "ident": "doom.doom_cs_monster_plan(integer)",
+   "file": "functions/doom_cs_monster_plan.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_respawn(integer,integer)",
+   "ident": "doom.doom_cs_monster_respawn(integer,integer)",
+   "file": "functions/doom_cs_monster_respawn.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_retarget(integer,integer)",
+   "ident": "doom.doom_cs_monster_retarget(integer,integer)",
+   "file": "functions/doom_cs_monster_retarget.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_step(integer,integer)",
+   "ident": "doom.doom_cs_monster_step(integer,integer)",
+   "file": "functions/doom_cs_monster_step.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monster_think(integer,integer)",
+   "ident": "doom.doom_cs_monster_think(integer,integer)",
+   "file": "functions/doom_cs_monster_think.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_monsters(integer,integer)",
+   "ident": "doom.doom_cs_monsters(integer,integer)",
+   "file": "functions/doom_cs_monsters.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_move(integer,integer)",
+   "ident": "doom.doom_cs_move(integer,integer)",
+   "file": "functions/doom_cs_move.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_movement_mode(integer,integer)",
+   "ident": "doom.doom_cs_movement_mode(integer,integer)",
+   "file": "functions/doom_cs_movement_mode.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_pickups(integer,integer)",
+   "ident": "doom.doom_cs_pickups(integer,integer)",
+   "file": "functions/doom_cs_pickups.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_plan(integer,integer)",
+   "ident": "doom.doom_cs_plan(integer,integer)",
+   "file": "functions/doom_cs_plan.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_player_pose(integer,integer)",
+   "ident": "doom.doom_cs_player_pose(integer,integer)",
+   "file": "functions/doom_cs_player_pose.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_projectiles(integer,integer)",
+   "ident": "doom.doom_cs_projectiles(integer,integer)",
+   "file": "functions/doom_cs_projectiles.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_secret(integer,integer)",
+   "ident": "doom.doom_cs_secret(integer,integer)",
+   "file": "functions/doom_cs_secret.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_sector_fx(integer,integer)",
+   "ident": "doom.doom_cs_sector_fx(integer,integer)",
+   "file": "functions/doom_cs_sector_fx.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_sound(integer,integer)",
+   "ident": "doom.doom_cs_sound(integer,integer)",
+   "file": "functions/doom_cs_sound.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_thing_physics(integer)",
+   "ident": "doom.doom_cs_thing_physics(integer)",
+   "file": "functions/doom_cs_thing_physics.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_turn(integer,integer)",
+   "ident": "doom.doom_cs_turn(integer,integer)",
+   "file": "functions/doom_cs_turn.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_use(integer,integer)",
+   "ident": "doom.doom_cs_use(integer,integer)",
+   "file": "functions/doom_cs_use.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_weapon(integer,integer)",
+   "ident": "doom.doom_cs_weapon(integer,integer)",
+   "file": "functions/doom_cs_weapon.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_cs_weapon_state(integer,integer)",
+   "ident": "doom.doom_cs_weapon_state(integer,integer)",
+   "file": "functions/doom_cs_weapon_state.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_demo_begin(text,integer,integer,integer)",
+   "ident": "doom.doom_demo_begin(text,integer,integer,integer)",
+   "file": "functions/doom_demo_begin.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_demo_play(text)",
+   "ident": "doom.doom_demo_play(text)",
+   "file": "functions/doom_demo_play.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_demo_stop()",
+   "ident": "doom.doom_demo_stop()",
+   "file": "functions/doom_demo_stop.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_enter_level(integer,integer,integer,integer,integer)",
+   "ident": "doom.doom_enter_level(integer,integer,integer,integer,integer)",
+   "file": "functions/doom_enter_level.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_finale_advance()",
+   "ident": "doom.doom_finale_advance()",
+   "file": "functions/doom_finale_advance.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_finale_begin(integer)",
+   "ident": "doom.doom_finale_begin(integer)",
+   "file": "functions/doom_finale_begin.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_finale_tic()",
+   "ident": "doom.doom_finale_tic()",
+   "file": "functions/doom_finale_tic.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_finish_level(integer,integer,boolean)",
+   "ident": "doom.doom_finish_level(integer,integer,boolean)",
+   "file": "functions/doom_finish_level.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_intermission_accelerate()",
+   "ident": "doom.doom_intermission_accelerate()",
+   "file": "functions/doom_intermission_accelerate.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_intermission_begin(integer,integer,boolean)",
+   "ident": "doom.doom_intermission_begin(integer,integer,boolean)",
+   "file": "functions/doom_intermission_begin.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_intermission_tic()",
+   "ident": "doom.doom_intermission_tic()",
+   "file": "functions/doom_intermission_tic.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_level_exit(integer,integer,boolean)",
+   "ident": "doom.doom_level_exit(integer,integer,boolean)",
+   "file": "functions/doom_level_exit.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_light_index(double precision,integer,integer)",
+   "ident": "doom.doom_light_index(double precision,integer,integer)",
+   "file": "functions/doom_light_index.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_light_scale(double precision)",
+   "ident": "doom.doom_light_scale(double precision)",
+   "file": "functions/doom_light_scale.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_light_zdepth(double precision)",
+   "ident": "doom.doom_light_zdepth(double precision)",
+   "file": "functions/doom_light_zdepth.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_load_game(integer)",
+   "ident": "doom.doom_load_game(integer)",
+   "file": "functions/doom_load_game.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_materialize_all_render_things()",
+   "ident": "doom.doom_materialize_all_render_things()",
+   "file": "functions/doom_materialize_all_render_things.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_materialize_render_segs(integer)",
+   "ident": "doom.doom_materialize_render_segs(integer)",
+   "file": "functions/doom_materialize_render_segs.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_materialize_render_things(integer)",
+   "ident": "doom.doom_materialize_render_things(integer)",
+   "file": "functions/doom_materialize_render_things.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_menu_input(text)",
+   "ident": "doom.doom_menu_input(text)",
+   "file": "functions/doom_menu_input.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_apply_mode()",
+   "ident": "doom.doom_mp_apply_mode()",
+   "file": "functions/doom_mp_apply_mode.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_begin_player(integer,integer,integer,bigint)",
+   "ident": "doom.doom_mp_begin_player(integer,integer,integer,bigint)",
+   "file": "functions/doom_mp_begin_player.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_configure(integer,integer,integer,boolean,boolean,boolean,integer)",
+   "ident": "doom.doom_mp_configure(integer,integer,integer,boolean,boolean,boolean,integer)",
+   "file": "functions/doom_mp_configure.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_frags(integer)",
+   "ident": "doom.doom_mp_frags(integer)",
+   "file": "functions/doom_mp_frags.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_intermission_begin()",
+   "ident": "doom.doom_mp_intermission_begin()",
+   "file": "functions/doom_mp_intermission_begin.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_intermission_over()",
+   "ident": "doom.doom_mp_intermission_over()",
+   "file": "functions/doom_mp_intermission_over.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_level_done(integer)",
+   "ident": "doom.doom_mp_level_done(integer)",
+   "file": "functions/doom_mp_level_done.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_next_map()",
+   "ident": "doom.doom_mp_next_map()",
+   "file": "functions/doom_mp_next_map.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_open()",
+   "ident": "doom.doom_mp_open()",
+   "file": "functions/doom_mp_open.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_reap(integer,integer)",
+   "ident": "doom.doom_mp_reap(integer,integer)",
+   "file": "functions/doom_mp_reap.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_referee_beat(integer)",
+   "ident": "doom.doom_mp_referee_beat(integer)",
+   "file": "functions/doom_mp_referee_beat.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_referee_claim(integer,integer)",
+   "ident": "doom.doom_mp_referee_claim(integer,integer)",
+   "file": "functions/doom_mp_referee_claim.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_referee_release(integer)",
+   "ident": "doom.doom_mp_referee_release(integer)",
+   "file": "functions/doom_mp_referee_release.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_request_all(integer)",
+   "ident": "doom.doom_mp_request_all(integer)",
+   "file": "functions/doom_mp_request_all.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_respawn(integer,integer)",
+   "ident": "doom.doom_mp_respawn(integer,integer)",
+   "file": "functions/doom_mp_respawn.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_rotate()",
+   "ident": "doom.doom_mp_rotate()",
+   "file": "functions/doom_mp_rotate.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_rules_live()",
+   "ident": "doom.doom_mp_rules_live()",
+   "file": "functions/doom_mp_rules_live.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_spawn_if_requested(integer,integer)",
+   "ident": "doom.doom_mp_spawn_if_requested(integer,integer)",
+   "file": "functions/doom_mp_spawn_if_requested.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_start(integer,integer)",
+   "ident": "doom.doom_mp_start(integer,integer)",
+   "file": "functions/doom_mp_start.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_vacate_all(integer)",
+   "ident": "doom.doom_mp_vacate_all(integer)",
+   "file": "functions/doom_mp_vacate_all.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_mp_world_flags(boolean)",
+   "ident": "doom.doom_mp_world_flags(boolean)",
+   "file": "functions/doom_mp_world_flags.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_prandom(bigint,bigint,bigint)",
+   "ident": "doom.doom_prandom(bigint,bigint,bigint)",
+   "file": "functions/doom_prandom.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_reset_stage(integer,integer)",
+   "ident": "doom.doom_reset_stage(integer,integer)",
+   "file": "functions/doom_reset_stage.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_run_game_tic(integer,integer,integer,real,real,boolean,real,boolean,integer,boolean)",
+   "ident": "doom.doom_run_game_tic(integer,integer,integer,real,real,boolean,real,boolean,integer,boolean)",
+   "file": "functions/doom_run_game_tic.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_run_mp_tic(integer,integer,integer,integer,integer,integer)",
+   "ident": "doom.doom_run_mp_tic(integer,integer,integer,integer,integer,integer)",
+   "file": "functions/doom_run_mp_tic.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_run_tic_core(integer,integer,integer,integer,integer,integer)",
+   "ident": "doom.doom_run_tic_core(integer,integer,integer,integer,integer,integer)",
+   "file": "functions/doom_run_tic_core.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_save_game(integer,integer,integer,integer,text)",
+   "ident": "doom.doom_save_game(integer,integer,integer,integer,text)",
+   "file": "functions/doom_save_game.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_sector_at(integer,double precision,double precision)",
+   "ident": "doom.doom_sector_at(integer,double precision,double precision)",
+   "file": "functions/doom_sector_at.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_slot_active(integer,integer)",
+   "ident": "doom.doom_slot_active(integer,integer)",
+   "file": "functions/doom_slot_active.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_spawn_player(integer,integer)",
+   "ident": "doom.doom_spawn_player(integer,integer)",
+   "file": "functions/doom_spawn_player.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_tic_dm_player(integer,integer)",
+   "ident": "doom.doom_tic_dm_player(integer,integer)",
+   "file": "functions/doom_tic_dm_player.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_tic_move(integer,integer)",
+   "ident": "doom.doom_tic_move(integer,integer)",
+   "file": "functions/doom_tic_move.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_tic_secrets(integer,integer,bigint)",
+   "ident": "doom.doom_tic_secrets(integer,integer,bigint)",
+   "file": "functions/doom_tic_secrets.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_tic_use(integer,integer,bigint)",
+   "ident": "doom.doom_tic_use(integer,integer,bigint)",
+   "file": "functions/doom_tic_use.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_tic_weapon(integer,integer,bigint)",
+   "ident": "doom.doom_tic_weapon(integer,integer,bigint)",
+   "file": "functions/doom_tic_weapon.sql"
+  },
+  {
+   "kind": "function",
+   "name": "doom_zlight_lut()",
+   "ident": "doom.doom_zlight_lut()",
+   "file": "functions/doom_zlight_lut.sql"
+  },
+  {
+   "kind": "function",
+   "name": "float8_mod(double precision,double precision)",
+   "ident": "doom.float8_mod(double precision,double precision)",
+   "file": "functions/float8_mod.sql"
+  },
+  {
+   "kind": "aggregate",
+   "name": "max(bytea)",
+   "ident": "doom.max(bytea)",
+   "file": "functions/max.sql"
+  },
+  {
+   "kind": "aggregate",
+   "name": "min(bytea)",
+   "ident": "doom.min(bytea)",
+   "file": "functions/min.sql"
+  },
+  {
+   "kind": "view",
+   "name": "api_map_geometry",
+   "ident": "doom.api_map_geometry",
+   "file": "views/api_map_geometry.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_map_lines",
+   "ident": "doom.api_map_lines",
+   "file": "views/api_map_lines.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_match",
+   "ident": "doom.api_match",
+   "file": "views/api_match.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_palettes",
+   "ident": "doom.api_palettes",
+   "file": "views/api_palettes.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_player_state",
+   "ident": "doom.api_player_state",
+   "file": "views/api_player_state.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_scoreboard",
+   "ident": "doom.api_scoreboard",
+   "file": "views/api_scoreboard.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_snapshot",
+   "ident": "doom.api_snapshot",
+   "file": "views/api_snapshot.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_sound_events",
+   "ident": "doom.api_sound_events",
+   "file": "views/api_sound_events.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_sound_loops",
+   "ident": "doom.api_sound_loops",
+   "file": "views/api_sound_loops.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_stage_music",
+   "ident": "doom.api_stage_music",
+   "file": "views/api_stage_music.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_stages",
+   "ident": "doom.api_stages",
+   "file": "views/api_stages.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_things_live",
+   "ident": "doom.api_things_live",
+   "file": "views/api_things_live.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_things_spawn",
+   "ident": "doom.api_things_spawn",
+   "file": "views/api_things_spawn.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "api_tic",
+   "ident": "doom.api_tic",
+   "file": "views/api_tic.sql",
+   "deps": []
+  },
+  {
+   "kind": "matview",
+   "name": "colormap_bytes",
+   "ident": "doom.colormap_bytes",
+   "file": "matviews/colormap_bytes.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "doom_monster_attackers",
+   "ident": "doom.doom_monster_attackers",
+   "file": "views/doom_monster_attackers.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "doom_player_pos",
+   "ident": "doom.doom_player_pos",
+   "file": "views/doom_player_pos.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "doom_player_shadow",
+   "ident": "doom.doom_player_shadow",
+   "file": "views/doom_player_shadow.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "doom_weapon_decision",
+   "ident": "doom.doom_weapon_decision",
+   "file": "views/doom_weapon_decision.sql",
+   "deps": []
+  },
+  {
+   "kind": "matview",
+   "name": "linedef_geom",
+   "ident": "doom.linedef_geom",
+   "file": "matviews/linedef_geom.sql",
+   "deps": []
+  },
+  {
+   "kind": "view",
+   "name": "mp_stats",
+   "ident": "doom.mp_stats",
+   "file": "views/mp_stats.sql",
+   "deps": []
+  },
+  {
+   "kind": "matview",
+   "name": "node_path_steps",
+   "ident": "doom.node_path_steps",
+   "file": "matviews/node_path_steps.sql",
+   "deps": []
+  },
+  {
+   "kind": "matview",
+   "name": "sector_adjacency",
+   "ident": "doom.sector_adjacency",
+   "file": "matviews/sector_adjacency.sql",
+   "deps": []
+  },
+  {
+   "kind": "matview",
+   "name": "ui_static_pixels",
+   "ident": "doom.ui_static_pixels",
+   "file": "matviews/ui_static_pixels.sql",
+   "deps": []
+  },
+  {
+   "kind": "matview",
+   "name": "ui_bar_bytes",
+   "ident": "doom.ui_bar_bytes",
+   "file": "matviews/ui_bar_bytes.sql",
+   "deps": [
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "matview",
+   "name": "ui_hud_pixels",
+   "ident": "doom.ui_hud_pixels",
+   "file": "matviews/ui_hud_pixels.sql",
+   "deps": []
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m1",
+   "ident": "doom.api_frame_idx_slot1_m1",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m1_low",
+   "ident": "doom.api_frame_idx_slot1_m1_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 1,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m1_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m1_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m1_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m2",
+   "ident": "doom.api_frame_idx_slot1_m2",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m2_low",
+   "ident": "doom.api_frame_idx_slot1_m2_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 2,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m2_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m2_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m2_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m3",
+   "ident": "doom.api_frame_idx_slot1_m3",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m3_low",
+   "ident": "doom.api_frame_idx_slot1_m3_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 3,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m3_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m3_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m3_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m4",
+   "ident": "doom.api_frame_idx_slot1_m4",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m4_low",
+   "ident": "doom.api_frame_idx_slot1_m4_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 4,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m4_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m4_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m4_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m5",
+   "ident": "doom.api_frame_idx_slot1_m5",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m5_low",
+   "ident": "doom.api_frame_idx_slot1_m5_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 5,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m5_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m5_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m5_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m6",
+   "ident": "doom.api_frame_idx_slot1_m6",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m6_low",
+   "ident": "doom.api_frame_idx_slot1_m6_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 6,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m6_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m6_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m6_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m7",
+   "ident": "doom.api_frame_idx_slot1_m7",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m7_low",
+   "ident": "doom.api_frame_idx_slot1_m7_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 7,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m7_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m7_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m7_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m8",
+   "ident": "doom.api_frame_idx_slot1_m8",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m8_low",
+   "ident": "doom.api_frame_idx_slot1_m8_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 8,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m8_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m8_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m8_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m9",
+   "ident": "doom.api_frame_idx_slot1_m9",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot1_m9_low",
+   "ident": "doom.api_frame_idx_slot1_m9_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 9,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m9_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot1_m9_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot1_m9_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m1",
+   "ident": "doom.api_frame_idx_slot2_m1",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m1_low",
+   "ident": "doom.api_frame_idx_slot2_m1_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 1,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m1_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m1_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m1_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m2",
+   "ident": "doom.api_frame_idx_slot2_m2",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m2_low",
+   "ident": "doom.api_frame_idx_slot2_m2_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 2,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m2_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m2_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m2_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m3",
+   "ident": "doom.api_frame_idx_slot2_m3",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 2,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m3_low",
+   "ident": "doom.api_frame_idx_slot2_m3_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 3,
+   "slot": 2,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m3_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m3_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m3_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m4",
+   "ident": "doom.api_frame_idx_slot2_m4",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m4_low",
+   "ident": "doom.api_frame_idx_slot2_m4_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 4,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m4_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m4_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m4_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m5",
+   "ident": "doom.api_frame_idx_slot2_m5",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m5_low",
+   "ident": "doom.api_frame_idx_slot2_m5_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 5,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m5_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m5_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m5_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m6",
+   "ident": "doom.api_frame_idx_slot2_m6",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 2,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m6_low",
+   "ident": "doom.api_frame_idx_slot2_m6_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 6,
+   "slot": 2,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m6_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m6_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m6_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m7",
+   "ident": "doom.api_frame_idx_slot2_m7",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m7_low",
+   "ident": "doom.api_frame_idx_slot2_m7_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 7,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m7_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m7_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m7_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m8",
+   "ident": "doom.api_frame_idx_slot2_m8",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m8_low",
+   "ident": "doom.api_frame_idx_slot2_m8_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 8,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m8_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m8_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m8_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m9",
+   "ident": "doom.api_frame_idx_slot2_m9",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot2_m9_low",
+   "ident": "doom.api_frame_idx_slot2_m9_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 9,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m9_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot2_m9_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot2_m9_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m1",
+   "ident": "doom.api_frame_idx_slot3_m1",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m1_low",
+   "ident": "doom.api_frame_idx_slot3_m1_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 1,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m1_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m1_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m1_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m2",
+   "ident": "doom.api_frame_idx_slot3_m2",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m2_low",
+   "ident": "doom.api_frame_idx_slot3_m2_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 2,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m2_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m2_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m2_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m3",
+   "ident": "doom.api_frame_idx_slot3_m3",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m3_low",
+   "ident": "doom.api_frame_idx_slot3_m3_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 3,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m3_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m3_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m3_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m4",
+   "ident": "doom.api_frame_idx_slot3_m4",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m4_low",
+   "ident": "doom.api_frame_idx_slot3_m4_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 4,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m4_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m4_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m4_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m5",
+   "ident": "doom.api_frame_idx_slot3_m5",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m5_low",
+   "ident": "doom.api_frame_idx_slot3_m5_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 5,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m5_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m5_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m5_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m6",
+   "ident": "doom.api_frame_idx_slot3_m6",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m6_low",
+   "ident": "doom.api_frame_idx_slot3_m6_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 6,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m6_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m6_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m6_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m7",
+   "ident": "doom.api_frame_idx_slot3_m7",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 3,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m7_low",
+   "ident": "doom.api_frame_idx_slot3_m7_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 7,
+   "slot": 3,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m7_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m7_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m7_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m8",
+   "ident": "doom.api_frame_idx_slot3_m8",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m8_low",
+   "ident": "doom.api_frame_idx_slot3_m8_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 8,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m8_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m8_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m8_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m9",
+   "ident": "doom.api_frame_idx_slot3_m9",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot3_m9_low",
+   "ident": "doom.api_frame_idx_slot3_m9_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 9,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m9_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot3_m9_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot3_m9_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m1",
+   "ident": "doom.api_frame_idx_slot4_m1",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m1_low",
+   "ident": "doom.api_frame_idx_slot4_m1_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 1,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m1_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m1_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m1_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m2",
+   "ident": "doom.api_frame_idx_slot4_m2",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m2_low",
+   "ident": "doom.api_frame_idx_slot4_m2_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 2,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m2_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m2_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m2_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m3",
+   "ident": "doom.api_frame_idx_slot4_m3",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m3_low",
+   "ident": "doom.api_frame_idx_slot4_m3_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 3,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m3_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m3_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m3_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m4",
+   "ident": "doom.api_frame_idx_slot4_m4",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m4_low",
+   "ident": "doom.api_frame_idx_slot4_m4_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 4,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m4_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m4_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m4_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m5",
+   "ident": "doom.api_frame_idx_slot4_m5",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m5_low",
+   "ident": "doom.api_frame_idx_slot4_m5_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 5,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m5_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m5_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m5_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m6",
+   "ident": "doom.api_frame_idx_slot4_m6",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m6_low",
+   "ident": "doom.api_frame_idx_slot4_m6_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 6,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m6_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m6_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m6_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m7",
+   "ident": "doom.api_frame_idx_slot4_m7",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m7_low",
+   "ident": "doom.api_frame_idx_slot4_m7_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 7,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m7_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m7_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m7_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m8",
+   "ident": "doom.api_frame_idx_slot4_m8",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m8_low",
+   "ident": "doom.api_frame_idx_slot4_m8_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 8,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m8_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m8_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m8_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m9",
+   "ident": "doom.api_frame_idx_slot4_m9",
+   "file": "slot_views/api_frame_idx_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "colormap_bytes",
+    "node_path_steps",
+    "ui_bar_bytes",
+    "ui_hud_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_idx_slot4_m9_low",
+   "ident": "doom.api_frame_idx_slot4_m9_low",
+   "file": "slot_views/api_frame_idx_slotS_mM_low.sql",
+   "map_id": 9,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m9_low TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_idx_slot4_m9_low TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_idx_slot4_m9_low TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m1",
+   "ident": "doom.api_frame_slot1_m1",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m2",
+   "ident": "doom.api_frame_slot1_m2",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m3",
+   "ident": "doom.api_frame_slot1_m3",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m4",
+   "ident": "doom.api_frame_slot1_m4",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m5",
+   "ident": "doom.api_frame_slot1_m5",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m6",
+   "ident": "doom.api_frame_slot1_m6",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m7",
+   "ident": "doom.api_frame_slot1_m7",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m8",
+   "ident": "doom.api_frame_slot1_m8",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot1_m9",
+   "ident": "doom.api_frame_slot1_m9",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot1_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot1_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m1",
+   "ident": "doom.api_frame_slot2_m1",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m2",
+   "ident": "doom.api_frame_slot2_m2",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m3",
+   "ident": "doom.api_frame_slot2_m3",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 2,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m4",
+   "ident": "doom.api_frame_slot2_m4",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m5",
+   "ident": "doom.api_frame_slot2_m5",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m6",
+   "ident": "doom.api_frame_slot2_m6",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 2,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m7",
+   "ident": "doom.api_frame_slot2_m7",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m8",
+   "ident": "doom.api_frame_slot2_m8",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot2_m9",
+   "ident": "doom.api_frame_slot2_m9",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot2_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot2_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m1",
+   "ident": "doom.api_frame_slot3_m1",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m2",
+   "ident": "doom.api_frame_slot3_m2",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m3",
+   "ident": "doom.api_frame_slot3_m3",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m4",
+   "ident": "doom.api_frame_slot3_m4",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m5",
+   "ident": "doom.api_frame_slot3_m5",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m6",
+   "ident": "doom.api_frame_slot3_m6",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m7",
+   "ident": "doom.api_frame_slot3_m7",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 3,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m8",
+   "ident": "doom.api_frame_slot3_m8",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot3_m9",
+   "ident": "doom.api_frame_slot3_m9",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot3_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot3_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m1",
+   "ident": "doom.api_frame_slot4_m1",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m2",
+   "ident": "doom.api_frame_slot4_m2",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m3",
+   "ident": "doom.api_frame_slot4_m3",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m4",
+   "ident": "doom.api_frame_slot4_m4",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m5",
+   "ident": "doom.api_frame_slot4_m5",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m6",
+   "ident": "doom.api_frame_slot4_m6",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m7",
+   "ident": "doom.api_frame_slot4_m7",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m8",
+   "ident": "doom.api_frame_slot4_m8",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "api_frame_slot4_m9",
+   "ident": "doom.api_frame_slot4_m9",
+   "file": "slot_views/api_frame_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.api_frame_slot4_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.api_frame_slot4_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m1",
+   "ident": "doom.doom_hud_slot1_m1",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m2",
+   "ident": "doom.doom_hud_slot1_m2",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m3",
+   "ident": "doom.doom_hud_slot1_m3",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m4",
+   "ident": "doom.doom_hud_slot1_m4",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m5",
+   "ident": "doom.doom_hud_slot1_m5",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m6",
+   "ident": "doom.doom_hud_slot1_m6",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m7",
+   "ident": "doom.doom_hud_slot1_m7",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m8",
+   "ident": "doom.doom_hud_slot1_m8",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot1_m9",
+   "ident": "doom.doom_hud_slot1_m9",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot1_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot1_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m1",
+   "ident": "doom.doom_hud_slot2_m1",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m2",
+   "ident": "doom.doom_hud_slot2_m2",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m3",
+   "ident": "doom.doom_hud_slot2_m3",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 2,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m4",
+   "ident": "doom.doom_hud_slot2_m4",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m5",
+   "ident": "doom.doom_hud_slot2_m5",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m6",
+   "ident": "doom.doom_hud_slot2_m6",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 2,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m7",
+   "ident": "doom.doom_hud_slot2_m7",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m8",
+   "ident": "doom.doom_hud_slot2_m8",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot2_m9",
+   "ident": "doom.doom_hud_slot2_m9",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot2_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot2_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m1",
+   "ident": "doom.doom_hud_slot3_m1",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m2",
+   "ident": "doom.doom_hud_slot3_m2",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m3",
+   "ident": "doom.doom_hud_slot3_m3",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m4",
+   "ident": "doom.doom_hud_slot3_m4",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m5",
+   "ident": "doom.doom_hud_slot3_m5",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m6",
+   "ident": "doom.doom_hud_slot3_m6",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m7",
+   "ident": "doom.doom_hud_slot3_m7",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 3,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m8",
+   "ident": "doom.doom_hud_slot3_m8",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot3_m9",
+   "ident": "doom.doom_hud_slot3_m9",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot3_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot3_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m1",
+   "ident": "doom.doom_hud_slot4_m1",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m2",
+   "ident": "doom.doom_hud_slot4_m2",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m3",
+   "ident": "doom.doom_hud_slot4_m3",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m4",
+   "ident": "doom.doom_hud_slot4_m4",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m5",
+   "ident": "doom.doom_hud_slot4_m5",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m6",
+   "ident": "doom.doom_hud_slot4_m6",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m7",
+   "ident": "doom.doom_hud_slot4_m7",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m8",
+   "ident": "doom.doom_hud_slot4_m8",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hud_slot4_m9",
+   "ident": "doom.doom_hud_slot4_m9",
+   "file": "slot_views/doom_hud_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hud_slot4_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hud_slot4_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m1",
+   "ident": "doom.doom_hudkey_slot1_m1",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m2",
+   "ident": "doom.doom_hudkey_slot1_m2",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m3",
+   "ident": "doom.doom_hudkey_slot1_m3",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m4",
+   "ident": "doom.doom_hudkey_slot1_m4",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m5",
+   "ident": "doom.doom_hudkey_slot1_m5",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m6",
+   "ident": "doom.doom_hudkey_slot1_m6",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m7",
+   "ident": "doom.doom_hudkey_slot1_m7",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 1,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m8",
+   "ident": "doom.doom_hudkey_slot1_m8",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot1_m9",
+   "ident": "doom.doom_hudkey_slot1_m9",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 1,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot1_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot1_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m1",
+   "ident": "doom.doom_hudkey_slot2_m1",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m2",
+   "ident": "doom.doom_hudkey_slot2_m2",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m3",
+   "ident": "doom.doom_hudkey_slot2_m3",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 2,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m4",
+   "ident": "doom.doom_hudkey_slot2_m4",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m5",
+   "ident": "doom.doom_hudkey_slot2_m5",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m6",
+   "ident": "doom.doom_hudkey_slot2_m6",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 2,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m7",
+   "ident": "doom.doom_hudkey_slot2_m7",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m8",
+   "ident": "doom.doom_hudkey_slot2_m8",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot2_m9",
+   "ident": "doom.doom_hudkey_slot2_m9",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 2,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot2_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot2_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m1",
+   "ident": "doom.doom_hudkey_slot3_m1",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m2",
+   "ident": "doom.doom_hudkey_slot3_m2",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m3",
+   "ident": "doom.doom_hudkey_slot3_m3",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m4",
+   "ident": "doom.doom_hudkey_slot3_m4",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m5",
+   "ident": "doom.doom_hudkey_slot3_m5",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m6",
+   "ident": "doom.doom_hudkey_slot3_m6",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 3,
+   "thing_id": 1,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m7",
+   "ident": "doom.doom_hudkey_slot3_m7",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 3,
+   "thing_id": 0,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m8",
+   "ident": "doom.doom_hudkey_slot3_m8",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot3_m9",
+   "ident": "doom.doom_hudkey_slot3_m9",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 3,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot3_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot3_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m1",
+   "ident": "doom.doom_hudkey_slot4_m1",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 1,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m1 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m1 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m1 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m2",
+   "ident": "doom.doom_hudkey_slot4_m2",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 2,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m2 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m2 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m2 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m3",
+   "ident": "doom.doom_hudkey_slot4_m3",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 3,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m3 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m3 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m3 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m4",
+   "ident": "doom.doom_hudkey_slot4_m4",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 4,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m4 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m4 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m4 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m5",
+   "ident": "doom.doom_hudkey_slot4_m5",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 5,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m5 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m5 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m5 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m6",
+   "ident": "doom.doom_hudkey_slot4_m6",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 6,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m6 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m6 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m6 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m7",
+   "ident": "doom.doom_hudkey_slot4_m7",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 7,
+   "slot": 4,
+   "thing_id": 2,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m7 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m7 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m7 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m8",
+   "ident": "doom.doom_hudkey_slot4_m8",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 8,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m8 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m8 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m8 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "slot_view",
+   "name": "doom_hudkey_slot4_m9",
+   "ident": "doom.doom_hudkey_slot4_m9",
+   "file": "slot_views/doom_hudkey_slotS_mM.sql",
+   "map_id": 9,
+   "slot": 4,
+   "thing_id": 3,
+   "grants": [
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m9 TO databricks_gateway;",
+    "GRANT SELECT ON TABLE doom.doom_hudkey_slot4_m9 TO databricks_reader_16406;",
+    "GRANT DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE doom.doom_hudkey_slot4_m9 TO databricks_superuser;"
+   ],
+   "deps": [
+    "node_path_steps",
+    "ui_hud_pixels",
+    "ui_static_pixels"
+   ]
+  },
+  {
+   "kind": "index",
+   "name": "idx_linedef_geom_map",
+   "ident": "doom.idx_linedef_geom_map",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_monster_projectiles_map",
+   "ident": "doom.idx_monster_projectiles_map",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_node_path_steps_map",
+   "ident": "doom.idx_node_path_steps_map",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_render_things_map",
+   "ident": "doom.idx_render_things_map",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_sector_adjacency",
+   "ident": "doom.idx_sector_adjacency",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_sound_events_map_id",
+   "ident": "doom.idx_sound_events_map_id",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_ui_hud_pixels_name",
+   "ident": "doom.idx_ui_hud_pixels_name",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "idx_world_effects_map",
+   "ident": "doom.idx_world_effects_map",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "linedef_geom_box_gist",
+   "ident": "doom.linedef_geom_box_gist",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "linedef_geom_special",
+   "ident": "doom.linedef_geom_special",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "linedefs_left_sd",
+   "ident": "doom.linedefs_left_sd",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "linedefs_right_sd",
+   "ident": "doom.linedefs_right_sd",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "node_path_steps_map_id",
+   "ident": "doom.node_path_steps_map_id",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "render_segs_ssector",
+   "ident": "doom.render_segs_ssector",
+   "file": "indexes.sql"
+  },
+  {
+   "kind": "index",
+   "name": "sidedefs_sector",
+   "ident": "doom.sidedefs_sector",
+   "file": "indexes.sql"
+  }
+ ]
+}

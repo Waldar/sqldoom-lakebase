@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQLDoom on Lakebase — Databricks App</title>
+<style>
+  /* Databricks palette: navy backgrounds, lava accent, oat text. */
+  :root { color-scheme: dark;
+          --bg: #0b2026; --bg2: #1b3139; --card: #10272e; --card-h: #143039; --line: #24434c;
+          --text: #eeede9; --dim: #8fa3aa; --faint: #5a6f77;
+          --lava: #ff3621; --lava2: #ff5f46; --green: #00a972; --yellow: #ffab00;
+          --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+          --sans: "DM Sans", Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; margin: 0; }
+  body { color: var(--text); font: 14px/1.4 var(--sans); min-height: 100vh;
+         background: radial-gradient(1200px 500px at 15% -10%, rgba(255,54,33,.18), transparent 60%),
+                     linear-gradient(180deg, var(--bg2) 0%, var(--bg) 420px); background-color: var(--bg); }
+  a { color: var(--lava2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1880px; margin: 0 auto; padding: 18px 22px 10px; }
+  /* header */
+  .top { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; }
+  .top h1 { font: 700 34px/1 var(--sans); letter-spacing: .16em; color: var(--lava);
+            text-shadow: 0 0 18px rgba(255,54,33,.35); }
+  .top .sub { font: 14px var(--mono); color: var(--dim); }
+  .top nav { margin-left: auto; display: flex; gap: 18px; font-size: 14px; }
+  /* controls row */
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0 6px; }
+  .controls input { background: rgba(11,32,38,.7); color: var(--text); border: 1px solid var(--line);
+                    border-radius: 4px; padding: 8px 10px; font: 14px var(--sans); width: 18em; }
+  .controls input:focus { outline: none; border-color: var(--lava); }
+  /* the text-field rule above made the Low detail checkbox 18em wide, far from its label */
+  .controls input[type=checkbox] { width: auto; padding: 0; margin: 0 6px 0 0; vertical-align: -2px; }
+  button { font: 500 13px var(--sans); cursor: pointer; border-radius: 4px; }
+  .btn { background: var(--card); color: var(--text); border: 1px solid var(--line); padding: 8px 16px; }
+  .btn.primary { background: var(--lava); border-color: var(--lava); color: #fff; }
+  .btn.primary:hover { background: var(--lava2); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--dim); }
+  .btn.ghost:hover { color: var(--text); }
+  #join-hint { color: var(--dim); font-size: 13px; }
+  .seg { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 4px;
+         overflow: hidden; background: rgba(11,32,38,.6); }
+  .seg .seg-label { color: var(--faint); font-size: 12px; padding: 0 8px 0 10px; }
+  .seg button { background: transparent; color: var(--dim); border: 0; border-left: 1px solid var(--line);
+                padding: 7px 12px; border-radius: 0; }
+  .seg button:first-of-type { border-left: 0; }
+  .seg .seg-label + button { border-left: 1px solid var(--line); }
+  .seg button.active { background: var(--lava); color: #fff; }
+  .seg button:disabled { opacity: .35; cursor: default; }
+  .spacer { flex: 1; }
+  #status { color: var(--green); min-height: 1.4em; font-size: 13px; margin-bottom: 8px; }
+  #status.bad { color: var(--lava2); }
+  /* layout */
+  /* Three columns: rendering stats | game | scoreboard + rules, kept down to
+     1150 px wide: the side columns narrow (240-340 px) and the game shrinks
+     to fit (2026-11-13: on a 16" laptop the stats went under the game, out
+     of sight). Narrower: game and players side by side, the stats under the
+     game; phone width: one column. */
+  .layout { display: grid; gap: 18px; align-items: start;
+            grid-template-columns: clamp(240px, 18vw, 340px) minmax(0, 1fr) clamp(240px, 18vw, 340px);
+            grid-template-areas: "stats game play"; }
+  .layout > section { grid-area: game; }
+  .side-play { grid-area: play; }
+  .side-stats { grid-area: stats; }
+  @media (max-width: 1150px) { .layout { grid-template-columns: minmax(0, 1fr) 300px;
+                                         grid-template-areas: "game play" "stats play"; } }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; grid-template-areas: "game" "play" "stats"; } }
+  /* Game size: at most 3x 320x200 (960 px wide; low detail 2x, 640 px), and
+     never taller than the window below it: --pane-fit is set by host.js
+     (fitPane) from the window height, so the whole game shows without
+     scrolling. Fullscreen for more. */
+  .pane { position: relative; background: #000; border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
+          width: 100%; max-width: min(962px, var(--pane-fit, 962px)); margin: 0 auto; transition: max-width .2s ease; }
+  body.low-detail .pane { max-width: min(642px, var(--pane-fit, 642px)); }
+  #help { max-width: min(962px, var(--pane-fit, 962px)); margin: 0 auto; }
+  body.low-detail #help { max-width: min(642px, var(--pane-fit, 642px)); }
+  .pane.live { border-color: var(--lava); box-shadow: 0 0 0 1px rgba(255,54,33,.25), 0 10px 40px rgba(0,0,0,.45); }
+  .pane-label { position: absolute; top: 8px; left: 10px; z-index: 2; background: rgba(11,32,38,.8);
+                color: var(--dim); padding: 3px 9px; font-size: 12px; border-radius: 3px; pointer-events: none; }
+  .pane-label b { color: var(--text); font-weight: 500; }
+  .pane iframe { width: 100%; aspect-ratio: 16 / 10; display: block; border: 0; }
+  /* end of a deathmatch: stay or go solo (host.js, game modes) */
+  #dm-choice { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 3;
+               display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 6px;
+               background: rgba(11,32,38,.92); border: 1px solid var(--line); }
+  #dm-choice[hidden] { display: none; }
+  /* Title menu and loading screen (host.js): over the game pane, Doom style. */
+  .doom-screen { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column;
+                 align-items: center; justify-content: center; gap: 14px; text-align: center;
+                 background: radial-gradient(ellipse at 50% 35%, #3a0d06 0%, #140302 55%, #000 100%); }
+  .doom-screen[hidden] { display: none; }
+  .doom-title { font: 900 clamp(38px, 7vw, 84px)/1 Impact, "Arial Black", var(--sans); letter-spacing: .06em;
+                color: #d81e05; transform: perspective(300px) rotateX(14deg);
+                text-shadow: 0 2px 0 #7a0e02, 0 4px 0 #4d0801, 0 6px 14px #000, 0 0 30px rgba(255,54,33,.35);
+                -webkit-text-stroke: 1px #2a0400; }
+  .doom-sub { font: 13px var(--mono); color: #c9a56b; letter-spacing: .2em; text-transform: uppercase; }
+  .doom-menu { list-style: none; padding: 0; margin-top: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .doom-menu li { position: relative; }
+  .doom-menu button { background: none; border: 0; padding: 4px 26px; cursor: pointer;
+                      font: 900 clamp(22px, 3.2vw, 36px)/1.1 Impact, "Arial Black", var(--sans); letter-spacing: .05em;
+                      color: #b51b06; text-transform: uppercase; text-shadow: 0 2px 0 #4d0801, 0 0 10px rgba(0,0,0,.9); }
+  .doom-menu button:disabled { color: #5a2a22; cursor: default; }
+  .doom-menu li.sel button { color: #ff4a26; }
+  .doom-menu li.sel::before { content: "\2620"; position: absolute; left: -16px; top: 50%; transform: translateY(-50%);
+                              color: #e8d9b0; font-size: clamp(20px, 2.6vw, 30px); animation: skull .5s steps(1) infinite; }
+  @keyframes skull { 50% { color: #a08a5c; } }
+  .doom-menu small { display: block; font: 12px var(--mono); color: #8f7350; letter-spacing: .05em; text-transform: none; text-shadow: none; }
+  .doom-hint { font: 12px var(--mono); color: #8f7350; margin-top: 10px; }
+  .doom-err { font: 13px var(--mono); color: var(--lava2); min-height: 1.2em; }
+  #loading-steps { list-style: none; padding: 0; font: 15px var(--mono); color: #8f7350; text-align: left; min-width: 22em; }
+  #loading-steps li { padding: 3px 0; }
+  #loading-steps li::before { content: "\00a0\00a0\00a0 "; }
+  #loading-steps li.now { color: #ffcf6b; }
+  #loading-steps li.now::before { content: "\25b6 "; }
+  #loading-steps li.done { color: #c9a56b; }
+  #loading-steps li.done::before { content: "\2714 "; color: var(--green); }
+  .doom-bar { width: min(420px, 70%); height: 14px; border: 2px solid #5a1a0c; background: #1a0503; }
+  .doom-bar div { height: 100%; width: 0; background: linear-gradient(90deg, #7a0e02, #ff3621); transition: width .4s ease; }
+  #loading-time { font: 12px var(--mono); color: #8f7350; }
+  /* Between two maps (host.js showBetween): the referee's VACUUM log. */
+  #between-log { font: 12px/1.45 var(--mono); color: #c9a56b; text-align: left; white-space: pre;
+                 width: min(92%, 60em); max-height: 58%; overflow: hidden; margin: 10px 0 6px;
+                 background: rgba(0,0,0,.35); padding: 8px 12px; border: 1px solid #3a2a14; }
+  #between-time { font: 12px var(--mono); color: #8f7350; }
+  #dm-choice span { color: var(--dim); font-size: 13px; }
+  .pane:fullscreen, body.low-detail .pane:fullscreen { display: flex; align-items: center; justify-content: center;
+                     border: 0; max-width: none; border-radius: 0; }
+  .pane:fullscreen iframe { height: 100%; width: auto; max-width: 100%; aspect-ratio: 16 / 10; }
+  #help { color: var(--dim); font-size: 12px; padding: 10px 2px; }
+  #help kbd { background: var(--card); border: 1px solid var(--line); border-radius: 3px;
+              padding: 0 5px; color: var(--text); font: 11px var(--mono); }
+  /* sidebar cards */
+  .side { display: flex; flex-direction: column; gap: 12px; }
+  /* Frame time: collapsible (<details>), one-line summary while closed */
+  details.card > summary { cursor: pointer; list-style: none; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary::before { content: '\25B8'; color: var(--faint); font-size: 12px; transition: transform .15s; }
+  details.card[open] > summary::before { transform: rotate(90deg); }
+  details.card:not([open]) > summary { border-bottom: 0; }
+  #bd-summary { font: 12.5px var(--mono); color: var(--dim); }
+  details.card[open] #bd-summary { display: none; }
+  .card { background: linear-gradient(180deg, rgba(20,48,57,.85), rgba(16,39,46,.85));
+          border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .card-h { display: flex; align-items: center; gap: 8px; padding: 9px 14px;
+            border-bottom: 1px solid var(--line); font-size: 16px; font-weight: 500; }
+  .card-h .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .card-b { padding: 2px 14px 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); display: inline-block; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.bad { background: var(--lava); }
+  .small-btn { background: transparent; color: var(--dim); border: 1px solid var(--line); padding: 3px 9px; font-size: 12px; }
+  .small-btn:hover { color: var(--text); border-color: var(--dim); }
+  .small-btn:disabled { opacity: .5; cursor: default; }
+  select.small-btn { background: var(--card); padding: 3px 6px; }
+  /* scoreboard */
+  .map-row { display: flex; justify-content: space-between; font: 15px var(--mono); padding: 7px 0 8px;
+             border-bottom: 1px solid var(--line); }
+  .map-row b { font-weight: 600; }
+  .map-row span { color: var(--dim); }
+  #score-list { list-style: none; padding: 0; font: 13px var(--mono); }
+  #score-list li { display: flex; gap: 14px; padding: 4px 0; border-bottom: 1px solid rgba(36,67,76,.6); }
+  #score-list li:last-child { border-bottom: 0; }
+  #score-list .slot { color: var(--faint); width: 1em; }
+  #score-list .who { flex: 1; text-transform: uppercase; }
+  #score-list .free { color: var(--faint); font-style: italic; text-transform: none; }
+  #score-list .state { color: var(--dim); }
+  #score-list li.me .who { color: var(--lava2); }
+  /* rules */
+  .rules-who { color: var(--dim); font-size: 12.5px; padding: 7px 0 4px; }
+  .rules-who b { color: var(--text); font-weight: 500; }
+  #rules-form .rule { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                      padding: 5px 0; border-bottom: 1px solid rgba(36,67,76,.6); font-size: 13px; }
+  #rules-form .rule > span:first-child { color: var(--dim); }
+  #rules-form .rule sup { color: var(--lava2); }
+  #rules-form input[type=number] { width: 4.2em; background: var(--card); color: var(--text);
+                                   border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; font: 12px var(--mono); }
+  #rules-form input:disabled, #rules-form select:disabled { opacity: .55; }
+  #rules-form .rule-fixed { color: var(--faint); font-size: 12px; padding: 6px 0 2px; line-height: 1.45; }
+  #rules-form .rule-actions { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
+  #rules-form .rule-actions span { flex: 1; color: var(--faint); font-size: 12px; }
+  .rules-use { padding: 2px 0 6px; }
+  .rules-use button { width: 100%; }
+  #rules-form .rule[hidden] { display: none; }
+  #rules-save.dirty { background: var(--lava); border-color: var(--lava); color: #fff; }
+  /* metrics */
+  .metric { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .metric:last-child { border-bottom: 0; }
+  .metric .num { flex: 1; min-width: 0; }
+  .metric .big { font: 500 26px/1.1 var(--sans); user-select: text; }
+  .metric .big small { font-size: 12px; color: var(--dim); margin-left: 3px; font-weight: 400; }
+  .metric .big.warn { color: var(--yellow); }
+  .metric .big.bad { color: var(--lava); }
+  .metric .lbl { color: var(--dim); font-size: 12.5px; margin-top: 2px; }
+  .metric .lbl .v { color: var(--text); }
+  .spark { width: 84px; height: 30px; flex: none; overflow: visible; }
+  .spark polyline { fill: none; stroke: var(--lava); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .spark line { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+  /* breakdown */
+  table.bd { width: 100%; border-collapse: collapse; font: 12.5px var(--mono); margin: 6px 0 2px; }
+  table.bd td { padding: 4px 0; border-bottom: 1px dashed rgba(36,67,76,.8); }
+  table.bd tr:last-child td { border-bottom: 0; }
+  table.bd td:first-child { color: var(--dim); }
+  table.bd td.v { text-align: right; color: var(--text); }
+  table.bd td.v.warn { color: var(--yellow); }
+  table.bd .bar { display: inline-block; height: 6px; background: var(--lava); border-radius: 2px;
+                  vertical-align: middle; margin-left: 8px; opacity: .8; }
+  table.bd tr.sum td { color: var(--text); font-weight: 600; border-top: 1px solid var(--line); }
+  /* what it runs on */
+  .runs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 8px 0 6px; }
+  .runs b { display: block; font: 500 24px/1.1 var(--sans); }
+  .runs span { color: var(--dim); font-size: 12.5px; }
+  .runs-text { color: var(--dim); font-size: 13px; line-height: 1.5; padding-bottom: 6px; }
+  .runs-text b { color: var(--text); font-weight: 500; }
+  footer { color: var(--faint); font-size: 12px; text-align: center; padding: 18px 16px 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <h1>SQLDOOM</h1>
+  <span class="sub">Doom, running as SQL in Databricks Lakebase</span>
+  <nav>
+    <a href="https://github.com/cedardb/sqldoom" target="_blank" rel="noopener">Source &#8599;</a>
+    <a href="https://docs.databricks.com/aws/en/oltp/" target="_blank" rel="noopener">Lakebase &#8599;</a>
+  </nav>
+</header>
+
+<div class="controls">
+  <input id="nick" maxlength="12" placeholder="your name" autocomplete="nickname" spellcheck="false">
+  <button id="to-menu" class="btn" hidden title="End this game and go back to the title menu. A single-player game is ended and its branch deleted; a multiplayer game goes on for the others.">Quit game</button>
+  <span id="join-hint">Your name, as other players see it.</span>
+  <span class="spacer"></span>
+  <div class="seg" id="conns" title="How many of your frames are computed at once, each on its own database connection. Only frames: the game tic runs on the primary 35 times a second whether anyone plays or not, and this setting does not change it.">
+    <span class="seg-label">frames in flight</span>
+    <button data-n="auto" title="2 to 6: one fewer when the game slows down (under 32 tics/s or p75 over 32 ms over 3 s), one more when p75 is under 27 ms at 34+ tics/s">auto</button><button data-n="1">1</button><button data-n="2">2</button><button data-n="4">4</button><button data-n="6">6</button>
+  </div>
+  <label class="btn ghost" title="Render every other column (160 instead of 320), doubled in the browser. About 33% faster frames, half the bandwidth."><input type="checkbox" id="low-detail"> Low detail</label>
+  <button id="fullscreen" class="btn ghost" title="Fullscreen game">&#9974;&nbsp; Fullscreen</button>
+</div>
+<div id="status"></div>
+
+<main class="layout">
+  <section>
+    <!-- the full game (upstream page, embedded); the stage selects where frames render -->
+    <div class="pane" id="pane">
+      <div class="pane-label">frames from <b id="pane-label">Lakebase Primary</b></div>
+      <iframe id="game" allow="autoplay; fullscreen"></iframe>
+      <div class="doom-screen" id="menu">
+        <div class="doom-title">SQLDOOM</div>
+        <div class="doom-sub">on Lakebase</div>
+        <ul class="doom-menu" id="menu-list"></ul>
+        <div class="doom-err" id="menu-err"></div>
+        <div class="doom-hint">&uarr; &darr; to choose &middot; Enter to start &middot; Esc back</div>
+      </div>
+      <div class="doom-screen" id="loading" hidden>
+        <div class="doom-title" style="font-size:clamp(28px,4.5vw,52px)">LOADING</div>
+        <ol id="loading-steps">
+          <li data-step="creating">creating your world (Lakebase branch)</li>
+          <li data-step="warming">loading the level into the cache</li>
+          <li data-step="starting">starting the game</li>
+          <li data-step="ready">entering E1M1</li>
+        </ol>
+        <div class="doom-bar"><div id="loading-bar"></div></div>
+        <div id="loading-time"></div>
+        <div class="doom-err" id="loading-err"></div>
+        <button class="btn" id="loading-back" hidden>Back to menu</button>
+      </div>
+      <div class="doom-screen" id="between" hidden>
+        <div class="doom-title" id="between-title" style="font-size:clamp(22px,3.5vw,40px)">LOADING</div>
+        <pre id="between-log"></pre>
+        <div id="between-time"></div>
+      </div>
+      <div id="dm-choice" hidden>
+        <span id="dm-choice-text">Deathmatch over</span>
+        <button class="btn primary" id="dm-stay">Stay in deathmatch</button>
+        <button class="btn" id="dm-solo">Play single player</button>
+      </div>
+    </div>
+    <div id="help">
+      Click the game, then:
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>&larr;</kbd><kbd>&rarr;</kbd> or mouse turn ·
+      <kbd>Ctrl</kbd> / click fire · <kbd>Shift</kbd> run · <kbd>Space</kbd> use ·
+      <kbd>1</kbd>&ndash;<kbd>7</kbd> / wheel weapons ·
+      <kbd>Tab</kbd> automap · <kbd>Shift</kbd>+<kbd>Tab</kbd> frags
+    </div>
+  </section>
+
+  <aside class="side side-play">
+    <div class="card">
+      <div class="card-h">Scoreboard
+        <span class="right" title="End this level for everyone: after the intermission the match moves to the chosen map. Seats carry over.">
+          <select id="map-pick" class="small-btn"><option value="next">next map</option></select>
+          <button class="small-btn" id="map-go">Change map</button>
+        </span>
+      </div>
+      <div class="card-b">
+        <div class="map-row"><b id="map-name">&mdash;</b><span id="map-time"></span></div>
+        <ol id="score-list">
+          <li><span class="slot">1</span><span class="who free">free</span></li>
+          <li><span class="slot">2</span><span class="who free">free</span></li>
+          <li><span class="slot">3</span><span class="who free">free</span></li>
+          <li><span class="slot">4</span><span class="who free">free</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="card" id="rules-card">
+      <div class="card-h">Rules
+        <span class="right" title="Each mode has its own rules. The match is in single player with one player and switches to multiplayer as soon as a second player joins.">
+          <select id="rules-mode" class="small-btn">
+            <option value="solo">Edit single player rules</option>
+            <option value="deathmatch">Edit multiplayer rules</option>
+          </select>
+        </span>
+      </div>
+      <div class="card-b">
+        <div class="rules-who" id="rules-who">&mdash;</div>
+        <div class="rules-use" id="rules-use" hidden>
+          <button type="button" class="small-btn" id="rules-use-btn"></button>
+        </div>
+        <form id="rules-form" autocomplete="off">
+          <label class="rule"><span>Monsters<sup>*</sup></span><input type="checkbox" name="monsters"></label>
+          <label class="rule" id="rule-skill"><span>Difficulty<sup>*</sup></span><select name="skill" class="small-btn"></select></label>
+          <div class="rule" id="rule-mrespawn" title="Doom's Nightmare respawn: a corpse can come back once this long has passed (then a random roll every 32 tics). Nightmare difficulty always respawns.">
+            <span>Monsters respawn</span>
+            <span><input type="checkbox" name="monster_respawn"> after <input type="number" name="monster_respawn_s" min="1" max="600"> s <small id="mrespawn-forced" hidden style="opacity:.7">(always on with Nightmare)</small></span>
+          </div>
+          <div class="rule" title="A picked-up item comes back after this long (Doom's deathmatch 2.0: 30 s).">
+            <span>Items respawn</span>
+            <span><input type="checkbox" name="item_respawn"> after <input type="number" name="item_respawn_s" min="1" max="600"> s</span>
+          </div>
+          <label class="rule" title="Deathmatch 1.0: a weapon stays on the ground for the others; each player can take it once."><span>Weapons stay</span><input type="checkbox" name="weapons_stay"></label>
+          <label class="rule" id="rule-death"><span>On death</span>
+            <select name="death_restart" class="small-btn">
+              <option value="1">Restart the level</option>
+              <option value="0">Respawn</option>
+            </select>
+          </label>
+          <div class="rule-fixed" id="rule-fixed"></div>
+          <div class="rule-actions">
+            <span id="rules-note"><sup>*</sup> restarts the level</span>
+            <button type="submit" class="small-btn" id="rules-save" disabled>Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </aside>
+
+  <aside class="side side-stats">
+    <div class="card">
+      <div class="card-h">Rendering
+        <span class="right">
+          <span class="dot" id="ref-dot" title="referee"></span>
+          <button class="small-btn" id="copy" title="Copy every number on this page as text">Copy stats</button>
+        </span>
+      </div>
+      <div class="card-b">
+        <div class="metric">
+          <div class="num"><div class="big" id="m-tic">&mdash;<small>ms</small></div>
+            <div class="lbl" title="One game step on the primary: monsters, doors, physics, every player's input. Runs 35 times a second with or without players.">game tic p50, budget <span id="m-budget">28.6</span> &middot; <span id="m-tic-sub"></span></div></div>
+          <svg class="spark" id="sp-tic" viewBox="0 0 84 30" preserveAspectRatio="none"><line x1="0" x2="84"/><polyline/></svg>
+        </div>
+        <div class="metric">
+          <div class="num"><div class="big" id="m-fps">&mdash;</div>
+            <div class="lbl">frames per second &middot; <span id="m-fps-sub"></span></div></div>
+          <svg class="spark" id="sp-fps" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
+        </div>
+        <div class="metric">
+          <div class="num"><div class="big" id="m-db">&mdash;<small>ms</small></div>
+            <div class="lbl">per frame at Lakebase &middot; <span id="m-db-sub"></span></div></div>
+          <svg class="spark" id="sp-db" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
+        </div>
+        <div class="metric">
+          <div class="num"><div class="big" id="m-rtt">&mdash;<small>ms</small></div>
+            <div class="lbl">round trip from your browser &middot; <span id="m-rtt-sub"></span></div></div>
+          <svg class="spark" id="sp-rtt" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
+        </div>
+        <div class="metric">
+          <div class="num"><div class="big" id="m-lag">&mdash;<small>tics</small></div>
+            <div class="lbl" id="m-lag-sub">replica lag behind the primary</div></div>
+          <svg class="spark" id="sp-lag" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
+        </div>
+        <div class="metric">
+          <div class="num"><div class="big" id="m-wire">&mdash;<small>KB/s</small></div>
+            <div class="lbl" id="m-wire-sub">on the wire</div></div>
+          <svg class="spark" id="sp-wire" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">What it runs on</div>
+      <div class="card-b">
+        <!-- filled by host.js from the game (GET /api/games/{id}): size, Postgres
+             version and region as the Lakebase API reports them for the game's endpoint -->
+        <div class="runs">
+          <div><b id="ro-cu">&mdash;</b><span>Lakebase compute</span></div>
+          <div><b id="ro-branch">&mdash;</b><span id="ro-branch-sub">your game's branch</span></div>
+          <div><b id="ro-pg">&mdash;</b><span id="ro-region">&mdash;</span></div>
+        </div>
+        <p class="runs-text">Each game gets its <b>own Lakebase branch</b>, where it runs as <b>plpgsql at 35 Hz</b>
+          (single player pauses while its tab is in the background). Every pixel of your view is computed by a
+          <b>SQL view</b> on that branch, as many frames at a time as <i>frames in flight</i>. Your browser speaks the Postgres wire protocol
+          through this <b>Databricks App</b>, which logs in with OAuth.</p>
+      </div>
+    </div>
+
+    <!-- Frame time: collapsible; host.js remembers open/closed and fills the one-line summary -->
+    <details class="card" id="bd-card" title="Where one frame's browser time goes, averaged over the last second, for this browser's frames only.&#10;db: the relay's time next to the database (camera write + render)&#10;network: time to the frame's first byte minus db (browser to app and back)&#10;transfer: first to last byte of the frame&#10;decode: parsing the frame (pgwire + delta XOR)&#10;wait: frame parsed until the render loop resumes&#10;camera: camera write answered (runs ahead of the frame)&#10;gap: time between two frames on screen (p50 / max)&#10;stall: longest browser main-thread stall&#10;ping: SELECT 1 on a render connection">
+      <summary class="card-h">Frame time<span class="right" id="bd-summary">&mdash;</span></summary>
+      <div class="card-b">
+        <table class="bd">
+          <tr><td>database</td><td class="v"><span id="bd-db">&mdash;</span><span class="bar" id="bar-db" style="width:0"></span></td></tr>
+          <tr><td>+ network + proxy</td><td class="v"><span id="bd-net">&mdash;</span><span class="bar" id="bar-net" style="width:0"></span></td></tr>
+          <tr><td>+ transfer</td><td class="v" id="bd-xfer">&mdash;</td></tr>
+          <tr><td>+ decode</td><td class="v" id="bd-decode">&mdash;</td></tr>
+          <tr><td>+ wait</td><td class="v" id="bd-wait">&mdash;</td></tr>
+          <tr class="sum"><td>= in the browser</td><td class="v" id="bd-total">&mdash;</td></tr>
+          <tr><td>camera write</td><td class="v" id="bd-cam">&mdash;</td></tr>
+          <tr><td>gap between frames p50 / max</td><td class="v" id="bd-gap">&mdash;</td></tr>
+          <tr><td>main-thread stall</td><td class="v" id="bd-stall">&mdash;</td></tr>
+          <tr><td>render conn round trip &middot; ping</td><td class="v" id="bd-rt">&mdash;</td></tr>
+          <tr><td>tic round trip</td><td class="v" id="bd-tic">&mdash;</td></tr>
+        </table>
+      </div>
+    </details>
+  </aside>
+</main>
+
+<footer>
+  <a href="https://github.com/cedardb/sqldoom" target="_blank" rel="noopener">SQLDoom</a> by CedarDB, ported to
+  Databricks Lakebase &middot; every pixel computed in SQL &middot; game logic at 35 Hz in Postgres
+</footer>
+</div>
+
+<script type="module" src="host.js"></script>
+</body>
+</html>

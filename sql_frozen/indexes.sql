@@ -1,0 +1,15 @@
+CREATE INDEX IF NOT EXISTS idx_linedef_geom_map ON doom.linedef_geom USING btree (map_id, linedef_id);
+CREATE INDEX IF NOT EXISTS idx_monster_projectiles_map ON doom.monster_projectiles USING btree (map_id);
+CREATE INDEX IF NOT EXISTS idx_node_path_steps_map ON doom.node_path_steps USING btree (map_id);
+CREATE INDEX IF NOT EXISTS idx_render_things_map ON doom.render_things USING btree (map_id);
+CREATE INDEX IF NOT EXISTS idx_sector_adjacency ON doom.sector_adjacency USING btree (map_id, sector_id);
+CREATE INDEX IF NOT EXISTS idx_sound_events_map_id ON doom.sound_events USING btree (map_id, event_id);
+CREATE INDEX IF NOT EXISTS idx_ui_hud_pixels_name ON doom.ui_hud_pixels USING btree (name);
+CREATE INDEX IF NOT EXISTS idx_world_effects_map ON doom.world_effects USING btree (map_id);
+CREATE INDEX IF NOT EXISTS linedef_geom_box_gist ON doom.linedef_geom USING gist (map_id, box(point((x1)::double precision, (y1)::double precision), point((x2)::double precision, (y2)::double precision)));
+CREATE INDEX IF NOT EXISTS linedef_geom_special ON doom.linedef_geom USING btree (map_id, special);
+CREATE INDEX IF NOT EXISTS linedefs_left_sd ON doom.linedefs USING btree (map_id, left_sd_id);
+CREATE INDEX IF NOT EXISTS linedefs_right_sd ON doom.linedefs USING btree (map_id, right_sd_id);
+CREATE INDEX IF NOT EXISTS node_path_steps_map_id ON doom.node_path_steps USING btree (map_id);
+CREATE INDEX IF NOT EXISTS render_segs_ssector ON doom.render_segs USING btree (map_id, ssector_id, seg_id) INCLUDE (fsec);
+CREATE INDEX IF NOT EXISTS sidedefs_sector ON doom.sidedefs USING btree (map_id, sector_id);
