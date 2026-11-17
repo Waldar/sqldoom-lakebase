@@ -9,7 +9,10 @@ sql/
   indexes.sql            indexes on tables and materialized views
 
 install(conn) does, in one transaction:
-  1. the migrations not applied yet (doom.schema_migrations records them);
+  1. the migrations not applied yet (doom.schema_migrations records them).
+     0001_baseline creates the tables and types; on a database that already
+     has them (made before migrations existed) it is recorded as applied
+     without running;
   2. when the code version (a hash of every other file under sql/) is not the
      one in doom.schema_version: drops the materialized views, creates every
      function, view and materialized view, then the frame views
@@ -25,6 +28,9 @@ from pathlib import Path
 
 SQL_ROOT = Path(__file__).resolve().parents[3] / "sql"
 SCHEMA = "doom"
+BASELINE = "0001_baseline"
+# a table of the baseline: when it exists, the baseline was applied another way
+_BASELINE_TABLE = f"{SCHEMA}.things"
 
 # Postgres errors that mean "an object this one needs is not there yet"
 _MISSING = {"42P01",   # undefined_table
@@ -194,6 +200,12 @@ def install(conn, root=SQL_ROOT, force=False):
             for m in _migrations(root):
                 if m.stem in applied:
                     continue
+                if m.stem == BASELINE:
+                    cur.execute("SELECT to_regclass(%s) IS NOT NULL", (_BASELINE_TABLE,))
+                    if cur.fetchone()[0]:
+                        log(f"migration {m.stem}: tables already there, recorded as applied")
+                        cur.execute(f"INSERT INTO {SCHEMA}.schema_migrations (id) VALUES (%s)", (m.stem,))
+                        continue
                 log(f"migration {m.stem}")
                 cur.execute(m.read_text(encoding="utf-8"))
                 cur.execute(f"INSERT INTO {SCHEMA}.schema_migrations (id) VALUES (%s)", (m.stem,))
