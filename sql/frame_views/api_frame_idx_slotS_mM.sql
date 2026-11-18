@@ -408,19 +408,6 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
              LEFT JOIN animated_light alf ON ((alf.sector_id = s.fsec)))
              LEFT JOIN animated_light alb ON ((alb.sector_id = s.bsec)))
              LEFT JOIN scrolling_segs sc ON ((sc.linedef_id = s.linedef_id)))
-        ), frame_walltex AS MATERIALIZED (
-         SELECT m.name,
-            m.width,
-            m.height,
-            (m.palette_indices || '\x'::bytea) AS palette_indices
-           FROM walltex_meta m
-          WHERE (m.name IN ( SELECT t.tex
-                   FROM (heights h
-                     CROSS JOIN LATERAL ( VALUES (h.upper_tex), (h.mid_tex), (h.lower_tex)) t(tex))
-                UNION
-                 SELECT ma.sky_texture
-                   FROM (maps ma
-                     JOIN render_context rc ON ((rc.map_id = ma.map_id)))))
         ), occluders AS (
          SELECT h.seg_id,
             h.screen_x1,
@@ -439,6 +426,36 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             min(occlusion_cols.bsp_seq) AS min_bsp_seq
            FROM occlusion_cols
           GROUP BY occlusion_cols.col_x
+        ), occlusion_arr AS MATERIALIZED (
+         -- min_occlusion as an array by column (index x + 1), the largest
+         -- bigint where nothing occludes: one subscript per column.
+         SELECT array_agg(COALESCE(mo.min_bsp_seq, '9223372036854775807'::bigint) ORDER BY g.x) AS a
+           FROM ((render_settings rs
+             CROSS JOIN LATERAL generate_series(0, (rs.screen_w - 1)) g(x))
+             LEFT JOIN min_occlusion mo ON ((mo.col_x = g.x)))
+        ), heights_shown AS (
+         -- The segs not wholly behind a nearer occluder: those with a column
+         -- that columns keeps (same rule, over a range at least as wide as
+         -- the seg's columns). The others make no parts, columns or panels,
+         -- and their textures are not loaded (LBDoom R4, 2026-11-17).
+         SELECT h.*
+           FROM ((heights h
+             CROSS JOIN occlusion_arr oa)
+             CROSS JOIN render_settings rs)
+          WHERE (NOT (h.bsp_seq > ALL (oa.a[(GREATEST(0, (floor(LEAST(h.screen_x1, h.screen_x2)))::integer) + 1):(LEAST((rs.screen_w - 1), (ceil(GREATEST(h.screen_x1, h.screen_x2)))::integer) + 1)])))
+        ), frame_walltex AS MATERIALIZED (
+         SELECT m.name,
+            m.width,
+            m.height,
+            (m.palette_indices || '\x'::bytea) AS palette_indices
+           FROM walltex_meta m
+          WHERE (m.name IN ( SELECT t.tex
+                   FROM (heights_shown h
+                     CROSS JOIN LATERAL ( VALUES (h.upper_tex), (h.mid_tex), (h.lower_tex)) t(tex))
+                UNION
+                 SELECT ma.sky_texture
+                   FROM (maps ma
+                     JOIN render_context rc ON ((rc.map_id = ma.map_id)))))
         ), wall_parts AS (
          SELECT heights.seg_id,
             'solid'::text AS part,
@@ -467,7 +484,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NULL) AND (heights.f_ceil > heights.f_floor))
         UNION ALL
          SELECT heights.seg_id,
@@ -497,7 +514,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NOT NULL) AND (heights.b_ceil < heights.f_ceil) AND (((heights.f_ceil_tex)::text IS DISTINCT FROM 'F_SKY1'::text) OR ((heights.b_ceil_tex)::text IS DISTINCT FROM 'F_SKY1'::text)))
         UNION ALL
          SELECT heights.seg_id,
@@ -524,7 +541,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NOT NULL) AND (heights.b_ceil > heights.f_ceil) AND (((heights.f_ceil_tex)::text IS DISTINCT FROM 'F_SKY1'::text) OR ((heights.b_ceil_tex)::text IS DISTINCT FROM 'F_SKY1'::text)))
         UNION ALL
          SELECT heights.seg_id,
@@ -551,7 +568,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NOT NULL) AND (heights.b_ceil = heights.f_ceil) AND (((heights.f_ceil_tex)::text IS DISTINCT FROM 'F_SKY1'::text) OR ((heights.b_ceil_tex)::text IS DISTINCT FROM 'F_SKY1'::text)))
         UNION ALL
          SELECT heights.seg_id,
@@ -581,7 +598,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NOT NULL) AND (heights.b_floor > heights.f_floor))
         UNION ALL
          SELECT heights.seg_id,
@@ -608,7 +625,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NOT NULL) AND (heights.b_floor <= heights.f_floor))
         UNION ALL
          SELECT heights.seg_id,
@@ -638,7 +655,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             heights.seg_u2,
             heights.bsp_seq,
             heights.light_bias
-           FROM heights
+           FROM heights_shown heights
           WHERE ((heights.bsec IS NOT NULL) AND (heights.mid_tex IS NOT NULL) AND ((heights.mid_tex)::text <> '-'::text) AND (heights.f_ceil > heights.f_floor))
         ), wall_parts_tex AS (
          SELECT wp.seg_id,
@@ -986,7 +1003,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             h.f_ceil,
             ((h.f_ceil_tex)::text = 'F_SKY1'::text) AS f_ceil_is_sky
            FROM ((vertical v
-             JOIN heights h ON ((h.seg_id = v.seg_id)))
+             JOIN heights_shown h ON ((h.seg_id = v.seg_id)))
              CROSS JOIN render_settings rs)
           WHERE ((v.part = ANY (ARRAY['upper_open'::text, 'upper_flush'::text, 'lower_down'::text])) OR ((LEAST(v.y_top_f, v.y_bot_f) < (rs.screen_h)::double precision) AND (GREATEST(v.y_top_f, v.y_bot_f) >= (0)::double precision)))
         ), panel_seq AS (
