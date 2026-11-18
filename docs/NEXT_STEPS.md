@@ -1,0 +1,47 @@
+# Next steps (planned 2026-11-18, not started)
+
+State when this was written: `main` at `164e97f`, live on `sqldoom-ltap`. Full-detail frames from LBDoom's 2026-11-17 renderer (~45 ms at the database, 24 CU), 35 frames/s on 2 connections in the owner's browser once `localStorage.doomPipeline` was cleared. Ilia's code: Git folder `/Users/fabien.contaminard@databricks.com/LBDoom-latest` (his `main` `2bb97bd`; clone with the `github-databricks` credential, his GitHub has an IP allow list).
+
+Order: 1 and 2 are small and independent; 3 is the big one; 4 can come before or after 3 (the frame views do not change with 3).
+
+## 1. Cheat codes, single player only (small)
+
+The SQL is there (`sql/functions/game/doom_cheat_key.sql`, `doom_cheat.sql`, `doom_cheat_arsenal.sql`, from SQLDoom), nothing calls it.
+
+* `sql/functions/api/api_cheat_key.sql`: `api_cheat_key(p_key text) RETURNS text`, SECURITY DEFINER like the other `api_*`: the caller's seat (`doom_caller()`), only when the match is in solo mode, then `doom_cheat_key` for that map and player; returns what the page must act on (as LBDoom's `cheat_key` statement, `doom_sql.py`).
+* Relay: add the statement to the allow-list (`src/sqldoom/server/relay.py`).
+* Page (`web/game/app.js`): while playing in solo, letters typed go to `api_cheat_key` (not while the automap or a menu takes them); show the answer ("Degreelessness mode on") as Doom's message line does.
+* Check which cheats need more than SQL: `idclev` (level warp) changes map, so it must go through the referee's rotation (or be left out at first); `idmus` changes music (with 2).
+* Test: on a scratch branch, `iddqd`, `idkfa`, `idfa`, `idclip`, `idbehold*` each change the player's state as Doom does; in a multiplayer match the function refuses.
+
+## 2. Music, single player only, with a music box next to Low detail (small to medium)
+
+The page plays music already (`Audio.setMusic`, `api_stage_music`), but `music_assets` has no audio: `src/sqldoom/wad/midi.py` only renders through `libfluidsynth`, which the setup's compute does not have ("Music will have no rendered audio").
+
+* `src/sqldoom/wad/midi.py`: add LBDoom's fallback (`midi_render.py`): `tinysoundfont` + `soundfile` from pip, with a General MIDI soundfont (`DOOM_SOUNDFONT`, or one of the usual paths). Check the soundfont's licence before shipping one; else the setup asks for its path.
+* `tools/render_music.py` (as LBDoom's `scripts/render_music.py`): renders the 13 tracks once and writes `music_assets.audio_data` on a branch; then a setup step `music` (idempotent: only tracks without audio), and a one-off run on `game-template`. Data, not code: the installer does not touch it.
+* Page: a "Music" box next to "Low detail" in `web/index.html` / `web/host.js`, shown in single player only, remembered per browser (like low detail); off = `stopMusic()` and no `api_stage_music` fetch. Multiplayer: no music (as today).
+* Test: 13 tracks with audio; E1M1 plays D_E1M1 and a map change switches track; the box off stops it at once; no music in a multiplayer game.
+
+## 3. Frames rendered in the app, pushed to the browser (big)
+
+Why: the browser asks for every frame across the internet (~15-30 ms each way here). Pipelining hides it for the frame rate, but each frame still starts on the browser's clock and after a trip to the app. LBDoom's app (`webapp/engine.py`) renders next to the database and pushes finished frames: a frame starts the moment a tic commits and draws that tic; the network only delays the picture.
+
+Design (LBDoom's, fitted to ours):
+
+* **Where:** in the referee's child process (one per game, `src/sqldoom/game/server.py`), which already owns the tic and knows when it commits. Render threads, each with its own connection (`jit = off`, `plan_cache_mode = force_generic_plan`, `synchronous_commit = off`, `work_mem = 8MB` as LBDoom), `SET doom.player` to the seat's player so the frame views work unchanged.
+* **When:** each render waits for a tic no frame has drawn yet (LBDoom `_claim_tic`), at most 35 a second. Renders in flight per seat adapted every half second to keep the tic under budget (LBDoom `_pace_renderers`: down above 26 ms at p75, up under 22 ms).
+* **Camera:** with frames on the tic, `api_camera`'s per-frame write is no longer needed: the view's `pos` can read the pose from `player_state` (its newest tic). That also stops the per-frame churn of `mp_players`.
+* **Transport:** child -> app parent (a pipe per game), parent -> each player's tab over one WebSocket (`/frames?game=&tab=`), with the relay's delta + deflate (`DeltaCoder`). Input can stay on the page's Postgres connection at first (it already goes out at once on key changes), or move to the same socket later.
+* **Page:** the render pool (`web/game/app.js`) replaced by a frame receiver: decode, draw newest, drop older (LBDoom's `drawNewest`); stats from the server (database time, renders in flight, tic->frame) plus the browser's own (arrival, decode). Keep the old pool behind a switch for A/B (shown in Copy stats).
+* **Multiplayer:** each seated player gets its own renders; CPU is the same as today (the frames are the same queries), the app's deflate work moves from the relay to the frame socket.
+* **Size:** about 600-900 lines changed: the child's render threads and tic signal (~250), the parent's frame socket and per-tab routing (~200), the page's receiver and stats (~250, minus the pool), docs. One or two sessions, then a play test solo and with 2-4 tabs.
+* **Tests:** frames byte-identical to today's views for the same tic (same SQL); 35 frames/s on 2 renders per seat on 12 and 24 CU; tic p50/p99 no worse than today (`tools/bench.py` and the play harness used for the vacuum comparison); input -> first frame with it, measured in the page (LBDoom's `?lag=1` is the model).
+
+## 4. Low detail at least as fast as full detail (medium)
+
+LBDoom has no low detail. Ours (`sql/frame_views/api_frame_idx_slotS_mM_low.sql`) is still the previous renderer (~90-105 ms, the full-detail views now ~45 ms), so it is slower than full detail.
+
+* Make the low-detail template from the full-detail one (LBDoom's renderer as converted, `api_frame_idx_slotS_mM.sql`), as the old one was made from the old: the scene's columns stepped by two (160 instead of 320, `generate_series(lo, hi, 2)` where columns are generated, the column count and pixel arithmetic of the frame tail for 160 x 168), the status bar unchanged at 320 x 32. Output 37,121 bytes, which the page already expands (`expandLow`).
+* A generator instead of a hand edit: `tools/make_low_detail.py` rewrites the full-detail template's anchors and fails if one is missing, so the next renderer update regenerates both.
+* Test, strict: on the same pose, every low-detail scene pixel equals the full-detail frame's pixel at the even column (byte-identical after `expandLow`'s doubling, except where Doom's low detail itself differs: compare with the previous low view too); status bar identical; timing on all 9 maps with `tools/frame_compare.py` (adapted for the `_low` views): low must be faster than full detail.
