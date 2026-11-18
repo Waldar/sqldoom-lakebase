@@ -166,7 +166,7 @@ document.addEventListener('visibilitychange', () => {
   if (wantPlay && !document.hidden && state === 'stopped') play();
   // Single player: the world pauses while the tab is in the background and
   // goes on where it was when it comes back (the seat is kept, see
-  // doomapp/games.py MODE_ENV). keepalive: the request still goes out as the
+  // sqldoom/lakebase/games.py MODE_ENV). keepalive: the request still goes out as the
   // tab hides. Multiplayer goes on without you (your seat is kept 90 s).
   if (GAME.id && GAME.mode === 'solo') {
     fetch(`/api/games/${GAME.id}/away?on=${document.hidden ? 1 : 0}&tab=${hostTab()}`,
@@ -216,7 +216,7 @@ window.addEventListener('message', (ev) => {
   }
 });
 
-// Loading screen between two maps (doomapp/referee.py: a map change from the
+// Loading screen between two maps (sqldoom/game/referee.py: a map change from the
 // page, or a single-player level end): instead of the intermission, the
 // referee's steps and VACUUM log over the game, until the new map starts.
 // local: shown by the page itself right after the click, until the referee
@@ -384,7 +384,7 @@ function renderScoreCard(rows, match, user) {
 
 // End of a deathmatch (one player left, or none): the final frag table is up
 // in the game; here the choice. No answer within 30 s means single player; a
-// player joining meanwhile starts a new deathmatch (doomapp/referee.py).
+// player joining meanwhile starts a new deathmatch (sqldoom/game/referee.py).
 function showChoice(on, secs) {
   $('dm-choice').hidden = !on;
   if (on) $('dm-choice-text').textContent = `Deathmatch over \u00b7 single player in ${secs} s`;
@@ -406,7 +406,7 @@ for (const [id, choice] of [['dm-stay', 'stay'], ['dm-solo', 'solo']]) {
   });
 }
 
-// Rules card: each mode's rules (doomapp/rules.py). Player 1, the player
+// Rules card: each mode's rules (sqldoom/server/rules.py). Player 1, the player
 // seated longest, can change them; everyone else sees them read-only.
 // Monsters and difficulty restart the level; the rest applies at once. Keys,
 // multiplayer-only items and "on death" are fixed by the mode.
@@ -562,7 +562,7 @@ $('fullscreen').addEventListener('click', () => {
 
 // --- Title menu and loading screen: one Lakebase branch per game ----------
 // Single player asks the app for a game of its own (POST /api/games: a new
-// branch from game-template, doomapp/games.py), shows the loading steps until
+// branch from game-template, sqldoom/lakebase/games.py), shows the loading steps until
 // its referee ticks, then loads the game with ?game=<id>: every connection
 // of the embed goes to that branch. Multiplayer opens a submenu: a new game
 // (its own branch at 32 CU, deathmatch rules, up to 4 players) or one of the

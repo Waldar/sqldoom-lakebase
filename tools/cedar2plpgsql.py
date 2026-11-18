@@ -1,6 +1,11 @@
 """cedar2plpgsql -- translate CedarDB `LANGUAGE cedarscript` functions to PL/pgSQL.
 
 Built for porting SQLDoom (github.com/cedardb/sqldoom) to Lakebase Postgres.
+Kept as the record of how the port was done: the game no longer uses it. Its
+output, tuned by hand afterwards, is the plain Postgres in sql/; the app and
+the setup never run this file. Comments below name the files of the port as
+they were then (postgres_compat.sql, doomapp/, static_check.py, upstream's
+sql/ tree), which are no longer in the repository.
 
 CedarScript constructs handled (the full set SQLDoom uses):
   let [mut] x = expr;          -> DECLARE x <inferred type>;  x := expr;

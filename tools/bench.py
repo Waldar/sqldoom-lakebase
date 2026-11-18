@@ -1,25 +1,28 @@
-#!/usr/bin/env python3
-"""SQLDoom on Lakebase: game-tic and renderer latency.
+"""SQLDoom on Lakebase: game-tic and frame latency, the way the app runs them.
 
-    python3 run_on_lakebase.py <repo> /abs/path/bench.py [--tics 300] [--frames 30] [--map E1M1]
+    PYTHONPATH=src python tools/bench.py --endpoint projects/<p>/branches/<scratch>/endpoints/primary
+        [--map E1M1] [--tics 300] [--frames 30] [--skill 2]
 
-Uses the repo's own prepared statements (doom_sql) exactly like doom_client.py
-(autocommit, so every tic is a committed transaction). Reports client-observed
-wall time and server-side execution time (EXPLAIN ANALYZE) to separate network
-from compute.
+On a scratch branch (a copy of game-template): the bench opens a match, takes
+seat 1 as the player "bench" and plays. Tics are the referee's statement
+(sqldoom.game.statements.mp_tic, autocommit: every tic a committed
+transaction), idle and with input (run, turn, fire through api_input). Frames
+are what the page reads: api_camera, then api_frame_idx_slot1_m<map>. Reports
+wall time seen by this client and the server's own time (EXPLAIN ANALYZE), to
+separate the network from the database.
 """
 import argparse
 import json
-import os
 import statistics
-import sys
 import time
 
 import psycopg2
 
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-import doom_sql as sql  # noqa: E402
-import prepared_pipeline_smoke as smoke  # noqa: E402
+from sqldoom.game import statements as sql
+from sqldoom.lakebase.connection import CREDS
+
+PLAYER = "bench"
+PROTECTED = ("/branches/production/", "/branches/game-template/")
 
 
 def pct(xs, p):
@@ -32,88 +35,94 @@ def line(name, xs):
           f"max={max(xs):8.2f}  mean={statistics.mean(xs):8.2f} ms")
 
 
-def server_ms(cur, name, params):
-    args = f"({','.join(['%s'] * len(params))})" if params else ""
-    cur.execute(f"EXPLAIN (ANALYZE, TIMING OFF, SUMMARY ON, FORMAT JSON) EXECUTE {name}{args}", params)
+def server_ms(cur, statement, params=()):
+    cur.execute(f"EXPLAIN (ANALYZE, TIMING OFF, SUMMARY ON, FORMAT JSON) {statement}", params)
     plan = cur.fetchone()[0]
     plan = plan[0] if isinstance(plan, list) else json.loads(plan)[0]
     return plan["Execution Time"] + plan.get("Planning Time", 0.0)
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--endpoint", required=True, help="a scratch branch's endpoint (the bench plays on it)")
+    ap.add_argument("--role", default="doom_owner")
     ap.add_argument("--tics", type=int, default=300)
     ap.add_argument("--frames", type=int, default=30)
     ap.add_argument("--map", default="E1M1")
     ap.add_argument("--skill", type=int, default=2)
     a = ap.parse_args()
+    if any(p in a.endpoint for p in PROTECTED):
+        raise SystemExit(f"{a.endpoint}: the bench plays on the branch; use a scratch copy, not production or game-template")
 
-    conn = psycopg2.connect(os.environ["DB_DSN"])
+    conn = psycopg2.connect(CREDS.dsn(a.endpoint, application_name="sqldoom-bench", role=a.role))
     conn.autocommit = True
     cur = conn.cursor()
+    cur.execute("SET doom.player = %s", (PLAYER,))     # doom_caller(): this session plays as PLAYER
 
-    # Network baseline
-    rtt = []
+    rtt = []                                            # network baseline
     for _ in range(50):
         t0 = time.perf_counter(); cur.execute("SELECT 1"); cur.fetchone()
         rtt.append((time.perf_counter() - t0) * 1e3)
 
-    stage = smoke.select_stage(cur, a.map)
-    map_id, player = stage["map_id"], stage["player_thing_id"]
-    sql.prepare_client(cur)
-    sql.reset_stage(cur, map_id, a.skill)
-    sql.spawn_stage(cur, stage)
-    sql.record_level_secret(cur, map_id, player)
+    cur.execute("SELECT map_id FROM maps WHERE name = %s", (a.map,))
+    map_id = cur.fetchone()[0]
+    sql.load_constants(cur)
+    sql.prepare(cur)
+    # the match row, as the game loop opens it for a solo game: no timer, no
+    # item respawn, monsters, no monster respawn, 10 s intermission
+    cur.execute("SELECT doom_mp_configure(%s, %s, 0, false, true, false, 350)", (map_id, a.skill))
+    players = sql.mp_start(cur, map_id, a.skill)
+    cur.execute("UPDATE mp_match SET map_id = %s, state = 'playing', intermission_until = NULL", (map_id,))
+    cur.execute("UPDATE mp_players SET role_name = NULL WHERE role_name = %s", (PLAYER,))
+    cur.execute("DELETE FROM mp_waiting")
+    cur.execute("SELECT api_join()")                    # the seat, as the page's join does
+    if cur.fetchone()[0] < 0:
+        raise SystemExit("could not take a seat (api_join)")
+    cur.execute("SELECT slot FROM mp_players WHERE role_name = %s", (PLAYER,))
+    slot = cur.fetchone()[0]
+    frame_sql = f"SELECT frame_rgb FROM api_frame_idx_slot{slot}_m{map_id}"
 
-    idle = (a.skill, 0.0, 0.0, False, 0.0, False, 0, False)
-    action = (a.skill, 1.0, 0.0, True, 3.0, True, 0, False)   # run + turn + fire
-    for _ in range(10):                                         # warm up plans
-        sql.execute_game_tic(cur, map_id, player, idle)
-        sql.finish_game_tic(cur, map_id, player)
-
-    tic, fin, poses = {"idle": [], "action": []}, {"idle": [], "action": []}, []
-    for label, cmd in (("idle", idle), ("action", action)):
-        for _ in range(a.tics):
-            t0 = time.perf_counter()
-            sql.execute_game_tic(cur, map_id, player, cmd)
-            t1 = time.perf_counter()
-            snap = sql.finish_game_tic(cur, map_id, player)
-            t2 = time.perf_counter()
-            tic[label].append((t1 - t0) * 1e3)
-            fin[label].append((t2 - t1) * 1e3)
-            if label == "action":
-                poses.append((snap["x"], snap["y"], snap["z"], snap["angle"]))
-
-    tic_server = [server_ms(cur, sql.GAME_TIC_STATEMENT, (map_id, player, *action)) for _ in range(20)]
-
-    # Renderer: folded form, exactly what the client uses after a level load
-    sql.prepare_renderer(cur, map_id, player, a.skill)
-    step = max(1, len(poses) // max(1, a.frames))
-    frame_poses = [p for p in poses[::step]][:a.frames] or poses[-1:]
-    for p in frame_poses[:6]:                                   # warm up / generic plan
-        sql.render_frame(cur, map_id, player, a.skill, p)
-    frames, sizes = [], set()
-    for p in frame_poses:
+    def tic(move):
+        if move:
+            cur.execute("SELECT api_input(1.0, 0.0, true, 3.0, true, 0, false)")   # run + turn + fire
         t0 = time.perf_counter()
-        raw = sql.render_frame(cur, map_id, player, a.skill, p)
+        if sql.mp_tic(cur, map_id, a.skill, players):
+            raise SystemExit("the level ended during the bench (an exit line?): run it again")
+        return (time.perf_counter() - t0) * 1e3
+
+    for _ in range(10):                                 # warm up plans, spawn
+        tic(False)
+    tics = {"idle": [tic(False) for _ in range(a.tics)], "action": [tic(True) for _ in range(a.tics)]}
+    tic_server = [server_ms(cur, "SELECT doom_run_mp_tic(%s,%s,%s,%s,%s,%s)",
+                            (map_id, a.skill, players[1], players.get(2), players.get(3), players.get(4)))
+                  for _ in range(20)]
+
+    for _ in range(3):                                  # warm up the frame view's plan
+        cur.execute("SELECT api_camera(1.0)"); cur.execute(frame_sql); cur.fetchone()
+    frames, sizes = [], set()
+    for _ in range(a.frames):
+        tic(True)                                       # a new pose for every frame
+        t0 = time.perf_counter()
+        cur.execute("SELECT api_camera(1.0)")
+        cur.execute(frame_sql)
+        raw = cur.fetchone()[0]
         frames.append((time.perf_counter() - t0) * 1e3)
-        sizes.add(len(raw))
-    render_server = [server_ms(cur, sql.RENDER_FOLDED_STATEMENT, tuple(p)) for p in frame_poses[:10]]
+        sizes.add(len(raw) if raw is not None else 0)
+    frame_server = [server_ms(cur, frame_sql) for _ in range(10)]
+    cur.execute("UPDATE mp_players SET role_name = NULL WHERE role_name = %s", (PLAYER,))
+    cur.execute("DELETE FROM mp_waiting WHERE role_name = %s", (PLAYER,))
 
     cur.execute("SHOW server_version"); ver = cur.fetchone()[0]
-    print(f"server {ver}; map {a.map}; skill {a.skill}")
+    print(f"server {ver}; map {a.map} (seat {slot}); skill {a.skill}")
     line("network RTT (SELECT 1)", rtt)
-    line("tic idle      client (game_tic)", tic["idle"])
-    line("tic idle      client (finish/snapshot)", fin["idle"])
-    line("tic action    client (game_tic)", tic["action"])
-    line("tic action    client (finish/snapshot)", fin["action"])
+    line("tic idle      client", tics["idle"])
+    line("tic action    client", tics["action"])
     line("tic action    server execution", tic_server)
-    line("render frame  client", frames)
-    line("render frame  server execution", render_server)
-    both = [x + y for x, y in zip(tic["action"], fin["action"])]
-    print(f"tic budget 28.6 ms: action tics within budget {sum(b <= 28.6 for b in both)}/{len(both)}")
-    print(f"frame sizes: {sorted(sizes)} (expected {320 * 200 * 3}); "
-          f"render fps (client p50) = {1000 / pct(frames, 50):.1f}")
+    line("frame         client (camera + frame)", frames)
+    line("frame         server execution", frame_server)
+    print(f"tic budget 28.6 ms: action tics within budget {sum(t <= 28.6 for t in tics['action'])}/{len(tics['action'])}")
+    print(f"frame sizes: {sorted(sizes)} bytes (palette byte + 320x200 palette indices); "
+          f"frames per second on one connection (client p50) = {1000 / pct(frames, 50):.1f}")
 
 
 if __name__ == "__main__":

@@ -82,8 +82,8 @@ IF (_cs.flags & 1) <> 0 THEN
 -- activation but before deleting its queued event, the event survives while
 -- the activation marker is already committed.  Drop such stale events before
 -- dispatching anything: replaying their effects is wrong, and attempting to
--- record the same marker again produces a duplicate-primary-key error on
--- CedarDB even with ON CONFLICT DO NOTHING.
+-- record the same marker again produced a duplicate-primary-key error on
+-- the original engine, even with ON CONFLICT DO NOTHING.
 DELETE FROM line_special_events e
 WHERE e.map_id=doom_cs_activate_specials.p_map_id AND EXISTS (
   SELECT 1

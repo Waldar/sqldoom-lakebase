@@ -2,6 +2,8 @@
 
 What landed, in the order it landed, with the measurement behind each change. Budget: one game tic in 28.6 ms (35 tics/s). CU = Lakebase compute units (4 CU is about 1 core, 32 CU about 8 cores; one Postgres query uses one core).
 
+This is a log: the "Where" columns name the files and mechanisms of the time (rewrite lists in the translator, `postgres_compat.sql`, `doomapp/`). All of it now lives in the plain SQL under `sql/` and in `src/sqldoom/`. To measure today's code: `tools/bench.py` on a scratch branch, `tools/mb_harness.py` for replays.
+
 ## How changes were measured
 
 * **Same state, same inputs.** For each variant, a fresh Lakebase branch from the same parent at the same LSN, the same scripted per-tic inputs, and an md5 hash of every game table (volatile columns such as event ids and timestamps excluded) every 10 or 20 tics.
@@ -36,7 +38,7 @@ The slot change has one visible effect: `doom_cs_weapon` ages bullet puffs and b
 | Visplane clipping: one window pass instead of two quadratic `LATERAL`s | included above | identical |
 | Floor and ceiling textures joined on an integer id resolved per span (762 rows) instead of a text key per pixel (37K rows) | p50 406 -> 347 ms | 60 frames identical |
 | 12 Postgres rewrites of the renderer | server p50 298 -> 187 ms, mean 356 -> 216 ms (8 CU) | 14 poses identical |
-| Review patches: sprite and weapon patches decoded once per frame, a CedarDB-only optimizer hack removed (it disabled the `render_segs` primary key and scanned 261K rows per frame), each wall texture decompressed once, BSP visibility once per frame | E1M1 232 -> 170 ms, E1M6 503 -> 189 ms (worst pose 1346 -> 299 ms), planning 79 -> 51 ms | 10 poses, indexed, low detail and RGB |
+| Review patches: sprite and weapon patches decoded once per frame, an optimizer hack for the original engine removed (it disabled the `render_segs` primary key and scanned 261K rows per frame), each wall texture decompressed once, BSP visibility once per frame | E1M1 232 -> 170 ms, E1M6 503 -> 189 ms (worst pose 1346 -> 299 ms), planning 79 -> 51 ms | 10 poses, indexed, low detail and RGB |
 | Status-bar cache: a referee worker renders the status bar every 100 ms into `hud_cache` per seat; frames reuse the bytes while its key matches | -10 ms per frame | 0 mismatches on 30 states |
 | Low-detail mode: 160 scene columns with `generate_series(lo, hi, 2)` (a `WHERE x % 2 = 0` filter made the planner estimate 0.5% of rows and was 48% slower than full detail) | p50 108 ms (-34%) | |
 | Frame tail: depth by `DISTINCT ON`, colormap as one 256-byte row per palette and light level (`colormap_idx_lvl`), holes filled by one join over all pixels | full 182.6 -> 167.5 ms, low 105.6 -> 91.2 ms | 13 poses identical |
