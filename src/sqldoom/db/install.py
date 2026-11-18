@@ -7,6 +7,9 @@ sql/
   matviews/*.sql         materialized views
   views/*.sql            views
   indexes.sql            indexes on tables and materialized views
+  seed/*.sql             the game's definitions (things, weapons, menus, rules):
+                         loaded once with the maps by the setup (sqldoom.wad),
+                         not by install()
 
 install(conn) does, in one transaction:
   1. the migrations not applied yet (doom.schema_migrations records them).
@@ -69,7 +72,8 @@ class Obj:
 
 
 def _code_files(root):
-    return sorted(p for p in root.rglob("*.sql") if "migrations" not in p.relative_to(root).parts)
+    return sorted(p for p in root.rglob("*.sql")
+                  if not {"migrations", "seed"} & set(p.relative_to(root).parts))
 
 
 def code_version(root=SQL_ROOT):
@@ -115,6 +119,8 @@ def status(conn, root=SQL_ROOT):
         has_mig, has_ver = cur.fetchone()
         applied = _applied(cur) if has_mig else set()
         installed = _installed_version(cur) if has_ver else None
+    if not conn.autocommit:
+        conn.rollback()          # read only: leave no transaction open
     pending = [p.stem for p in _migrations(root) if p.stem not in applied]
     code = code_version(root)
     return {"pending_migrations": pending, "installed": installed, "code": code,

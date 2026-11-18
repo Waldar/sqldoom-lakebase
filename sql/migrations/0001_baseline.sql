@@ -36,6 +36,33 @@ CREATE TYPE doom.texture_part AS ENUM ('upper', 'middle', 'lower');
 CREATE TYPE doom.trigger_kind AS ENUM ('use', 'cross', 'shoot');
 CREATE TYPE doom.weapon_state AS ENUM ('up', 'down', 'ready', 'fire', 'flash');
 
+-- Text is assigned to enum columns implicitly in the game's SQL (e.g.
+-- SET mode = CASE .. THEN 'full' END): one assignment cast per enum type.
+CREATE CAST (text AS doom.actor_state) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.ammo_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.boss_action) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.bsp_child) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.damage_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.door_target) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.effect_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.height_target) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.hit_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.key_color) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.light_source) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.match_state) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.movement_mode) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.mover_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.pickup_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.plane_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.projectile_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.projectile_state) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.screen_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.sound_cue) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.special_mechanic) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.texture_part) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.trigger_kind) WITH INOUT AS ASSIGNMENT;
+CREATE CAST (text AS doom.weapon_state) WITH INOUT AS ASSIGNMENT;
+
 -- Tables (foreign keys at the end)
 
 CREATE TABLE doom.ammo_defs (

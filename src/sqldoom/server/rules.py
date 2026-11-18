@@ -2,7 +2,7 @@
 
 Player 1 is the player seated longest (earliest mp_players.claimed_at among the
 held slots); the role passes on when that player leaves. Each mode has its own
-rule set (mp_rules, see postgres_compat.sql):
+rule set (mp_rules, defaults in sql/seed/rules.sql):
 
   monsters, skill                    need a level restart: saving one of them
                                      sets mp_match.pending = 'rules' and the

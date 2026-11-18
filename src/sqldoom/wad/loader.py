@@ -1,5 +1,13 @@
-#!/usr/bin/env python3
-""" Load classic maps from a WAD into CedarDB. """
+"""Loads the maps and assets of a Doom WAD into the game's tables.
+
+The tables, types and the game's SQL come from sql/ (sqldoom.db.install);
+this module only fills them: the game's definitions (sql/seed/), then from
+the WAD the palettes, colormap, textures, flats, sprites, status bar,
+sounds, music and every selected map, then what is derived from them (render
+caches, materialized views, colormap bytes) and the frame views.
+
+    PYTHONPATH=src python -m sqldoom.wad <DOOM1.WAD> [E1M1 ...] --endpoint <Lakebase endpoint>
+"""
 
 import argparse
 import io
@@ -9,16 +17,15 @@ import struct
 import time
 import wave
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from pathlib import Path
 from typing import Dict, List, Tuple
 
 import psycopg2
 from psycopg2.extras import execute_values
 
-import midi_render
-from cedarscript_runtime import install_cedarscript_runtime
-from wad_sql import (
-    install_loader_functions,
+from . import midi as midi_render
+from .catalogs import (
+    create_frame_views,
+    derive_colormap_bytes,
     load_game_data,
     stamp_line_specials,
     materialize_ui_pixels,
@@ -29,7 +36,6 @@ from wad_sql import (
 
 
 LE = "<"  # little-endian struct prefix
-DEFAULT_SCHEMA = Path(__file__).resolve().parent / "sql" / "schema.sql"
 
 
 def progress(message: str):
@@ -514,74 +520,6 @@ def _gather_map_lumps(lumps: List[Dict], start_idx: int) -> Tuple[str, Dict[str,
 # -------------------------
 # DB helpers
 # -------------------------
-
-def _connect(args):
-    if args.dsn:
-        return psycopg2.connect(args.dsn)
-    # fall back to discrete params or env PG* defaults
-    return psycopg2.connect(
-        host=args.host,
-        port=args.port,
-        user=args.user,
-        password=args.password,
-        dbname=args.dbname,
-    )
-
-
-def _split_statements(sql: str):
-    """Split a schema script into single statements."""
-    statements, current = [], []
-    in_string = in_comment = False
-    index = 0
-    while index < len(sql):
-        char = sql[index]
-        if in_comment:
-            if char == "\n":
-                in_comment = False
-                current.append(char)
-        elif in_string:
-            current.append(char)
-            if char == "'":
-                # '' is an escaped quote, not the end of the string.
-                if sql[index + 1:index + 2] == "'":
-                    current.append("'")
-                    index += 1
-                else:
-                    in_string = False
-        elif char == "-" and sql[index + 1:index + 2] == "-":
-            in_comment = True
-            index += 1
-        elif char == "'":
-            in_string = True
-            current.append(char)
-        elif char == ";":
-            statement = "".join(current).strip()
-            if statement:
-                statements.append(statement)
-            current = []
-        else:
-            current.append(char)
-        index += 1
-    tail = "".join(current).strip()
-    if tail:
-        statements.append(tail)
-    return statements
-
-
-def apply_schema(cur, path: str):
-    if not path:
-        return
-    with open(path, "r", encoding="utf-8") as f:
-        sql = f.read()
-    # One statement per execute.
-    for statement in _split_statements(sql):
-        m = re.match(r"CREATE TYPE (\w+) AS ENUM", statement)
-        if m:  # no IF NOT EXISTS for types; the schema is applied on every import
-            cur.execute("SELECT 1 FROM pg_type WHERE typname = %s", (m.group(1),))
-            if cur.fetchone():
-                continue
-        cur.execute(statement)
-
 
 def insert_wad(cur, wad_type: str, wad_path: str) -> int:
     cur.execute(
@@ -1194,6 +1132,12 @@ def load_map(fp, cur, map_id: int, by_name: Dict[str, Dict]):
             (map_id, origin_x, origin_y, cols, rows, psycopg2.Binary(data)),
         )
 
+    # Statistics that include this map's rows, before its caches are built.
+    # The hot tables have automatic ANALYZE off (sql/migrations/0001_baseline.sql),
+    # so the planner would otherwise plan the cache queries for tables it
+    # believes empty, or for the previous maps only (tested 2026-11-18: E1M9's
+    # caches took 240 s; ANALYZE before the map's rows: E1M6 never finished).
+    cur.execute("ANALYZE")
     progress("  Materializing renderer segment cache...")
     materialize_render_segs(cur, map_id)
     progress("  Materializing renderer Thing cache...")
@@ -1204,30 +1148,17 @@ def load_map(fp, cur, map_id: int, by_name: Dict[str, Dict]):
 # Main
 # -------------------------
 
-def main():
-    ap = argparse.ArgumentParser(description="Load classic DOOM WAD maps into PostgreSQL.")
-    ap.add_argument("wad", help="Path to IWAD/PWAD file")
-    ap.add_argument("maps", nargs="*", help="Optional map names to load (e.g., MAP01 E1M1)")
-    ap.add_argument(
-        "--schema",
-        default=DEFAULT_SCHEMA,
-        help="Schema path (default: sql/schema.sql; applied idempotently)",
-    )
-    # Public-distribution edit, 2026-11-16: password-free DSN example only.
-    ap.add_argument("--dsn", help="Postgres DSN, e.g. host=localhost port=5432 dbname=db user=user")
-    ap.add_argument("--host", default=os.getenv("PGHOST"))
-    ap.add_argument("--port", default=os.getenv("PGPORT"))
-    ap.add_argument("--user", default=os.getenv("PGUSER"))
-    ap.add_argument("--password", default=os.getenv("PGPASSWORD"))
-    ap.add_argument("--dbname", default=os.getenv("PGDATABASE"))
-    args = ap.parse_args()
-
+def load(conn, wad_path, maps=()):
+    """Load the WAD's assets and maps (all of them, or `maps`: E1M1 ...) into
+    conn's branch, whose schema is installed (sqldoom.db.install) and holds
+    no maps yet. Each map is one transaction. Returns the maps loaded."""
     total_started = time.perf_counter()
-    progress(f"Reading {os.path.abspath(args.wad)}...")
-    with open(args.wad, "rb") as fp:
+    progress(f"Reading {os.path.abspath(wad_path)}...")
+    conn.autocommit = False
+    with open(wad_path, "rb") as fp:
         wad_type, lumps = parse_wad(fp)
         available_maps = [l["name"] for l in lumps if _is_map_marker(l["name"])]
-        requested_maps = {name.upper() for name in args.maps}
+        requested_maps = {name.upper() for name in maps}
         selected_maps = [
             name for name in available_maps
             if not requested_maps or name.upper() in requested_maps
@@ -1237,37 +1168,11 @@ def main():
             f"Found {wad_type} with {len(lumps)} lumps and "
             f"{len(available_maps)} maps; selected: {selected_label}."
         )
-
-        progress("Connecting to the database...")
-        conn = _connect(args)
-        progress("Connected.")
         try:
-            # CedarDB requires CREATE INDEX outside a transaction.
-            phase_started = time.perf_counter()
-            progress(f"Applying schema from {args.schema}...")
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                apply_schema(cur, args.schema)
-                install_loader_functions(cur)
-            conn.autocommit = False
-            progress(
-                "Schema and SQL loader functions applied in "
-                f"{time.perf_counter() - phase_started:.1f}s."
-            )
-            phase_started = time.perf_counter()
-            progress("Installing the SQL game-tic runtime...")
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                install_cedarscript_runtime(cur)
-            conn.autocommit = False
-            progress(
-                "SQL game-tic runtime installed in "
-                f"{time.perf_counter() - phase_started:.1f}s."
-            )
             with conn:
                 with conn.cursor() as cur:
                     # Insert WAD row and get wad_id
-                    wad_id = insert_wad(cur, wad_type, args.wad)
+                    wad_id = insert_wad(cur, wad_type, wad_path)
                     progress(f"Created WAD record {wad_id}; loading global assets...")
 
                     progress("Loading SQL gameplay catalogs...")
@@ -1312,8 +1217,11 @@ def main():
                 with conn.cursor() as cur:
                     progress("Stamping line special flags...")
                     stamp_line_specials(cur)
-                    progress("Refreshing derived geometry...")
+                    progress("Refreshing the materialized views...")
                     refresh_derived(cur)
+                    derive_colormap_bytes(cur)
+                    n = create_frame_views(cur)
+                    progress(f"{n} frame views created.")
 
             # Leave the optimizer with fresh statistics. Without them the
             # game tic plans badly -- measured at 8.4 ms per tic against
@@ -1329,9 +1237,28 @@ def main():
                 f"Import complete: {selected_index} maps loaded in "
                 f"{time.perf_counter() - total_started:.1f}s."
             )
+        except Exception:
+            if not conn.autocommit:
+                conn.rollback()
+            raise
+    return selected_maps
 
-        finally:
-            conn.close()
+
+def main():
+    from sqldoom import db
+    from sqldoom.lakebase.connection import CREDS
+    ap = argparse.ArgumentParser(description="Load a Doom WAD's maps into a Lakebase branch.")
+    ap.add_argument("wad", help="Path to the IWAD/PWAD file")
+    ap.add_argument("maps", nargs="*", help="Map names to load (default: all), e.g. E1M1 E1M2")
+    ap.add_argument("--endpoint", required=True, help="Lakebase endpoint, projects/<p>/branches/<b>/endpoints/<e>")
+    ap.add_argument("--role", default=os.getenv("DOOM_DB_ROLE", "doom_owner"), help="Role to run as (doom_owner)")
+    args = ap.parse_args()
+    conn = psycopg2.connect(CREDS.dsn(args.endpoint, application_name="sqldoom-wad", role=args.role))
+    try:
+        db.install(conn)
+        load(conn, args.wad, args.maps)
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

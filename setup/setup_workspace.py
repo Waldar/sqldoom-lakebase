@@ -3,8 +3,9 @@
 Every step checks what is already there and only does what is missing, so a
 failed run can be started again. Run it from a notebook in the workspace (in
 the notebook's own Python: a subprocess cannot use the notebook's sign-in),
-see setup_notebook.py, or from a laptop signed in with `databricks auth login`.
+see setup_notebook.ipynb, or from a laptop signed in with `databricks auth login`.
 
+    import sys; sys.path[:0] = ["<repo>/setup"]
     from setup_workspace import Setup
     s = Setup(project="sqldoom", app="sqldoom-ltap",
               wad="/Volumes/<catalog>/<schema>/wad/DOOM1.WAD")
@@ -14,14 +15,14 @@ see setup_notebook.py, or from a laptop signed in with `databricks auth login`.
 Steps (Setup.STEPS):
   project     Lakebase project (Postgres 17), default endpoint size 24 CU
   compute     the default branch's primary sized for the map load (8 CU)
-  database    schema doom, extension pg_prewarm, work_mem 64 MB
-  maps        the 9 shareware maps (upstream wad_loader.py through the
-              CedarScript translator, run_on_lakebase.py): tables, data,
-              upstream functions
-  owner       setup_doom_owner.sql parts 1 and 3: role doom_owner owns the
-              schema, schema lobby
-  sql         table_settings.sql, then sql_frozen/ applied (doomapp/frozen.py)
-              and checked
+  database    schema doom, extensions btree_gist and pg_prewarm, work_mem 64 MB
+  owner       doom_owner.sql parts 1 and 3: role doom_owner owns the schema,
+              schema lobby
+  maps        as doom_owner: the tables, types and the game's SQL from sql/
+              (sqldoom.db), then the game's definitions and the 9 shareware
+              maps from DOOM1.WAD (sqldoom.wad), the frame views last
+  sql         the game's SQL up to date (sqldoom.db.install; a no-op right
+              after maps)
   app         the Databricks App with its Lakebase resource; its service
               principal is granted doom_owner and Can manage on the project
   template    branch game-template from the default branch, no expiry. After
@@ -39,18 +40,15 @@ Not done here: uploading DOOM1.WAD to a volume (it cannot ship with the code),
 deploying the app (Setup.deploy(), or the app page: Deploy), giving players
 Can use on the app.
 """
-import os
 import re
-import runpy
 import sys
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-REPO = HERE / "sqldoom"
-for _p in (str(HERE), str(REPO)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+HERE = Path(__file__).resolve().parent         # setup/
+REPO = HERE.parent                             # the repository: the app's source
+if str(REPO / "src") not in sys.path:
+    sys.path.insert(0, str(REPO / "src"))
 
 MAPS = ("E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8", "E1M9")
 
@@ -60,11 +58,11 @@ def log(msg):
 
 
 class Setup:
-    STEPS = ("project", "compute", "database", "maps", "owner", "sql", "app", "template", "config", "shrink")
+    STEPS = ("project", "compute", "database", "owner", "maps", "sql", "app", "template", "config", "shrink")
 
     def __init__(self, project="sqldoom", app="sqldoom-ltap", wad=None, maps=MAPS,
                  db="databricks_postgres", schema="doom", role="doom_owner", template="game-template",
-                 default_cu=24.0, load_cu=8.0, lobby_cu=1.0, pg_version=17, app_yaml=HERE / "app.yaml"):
+                 default_cu=24.0, load_cu=8.0, lobby_cu=1.0, pg_version=17, app_yaml=REPO / "app.yaml"):
         from databricks.sdk import WorkspaceClient
         self.w = WorkspaceClient()
         self.project_id = project
@@ -98,7 +96,7 @@ class Setup:
 
     def connect(self, role=None, endpoint=None):
         import psycopg2
-        from doomapp.lakebase import CREDS
+        from sqldoom.lakebase.connection import CREDS
         conn = psycopg2.connect(CREDS.dsn(endpoint or self.endpoint, application_name="sqldoom-setup", role=role))
         conn.autocommit = True
         return conn
@@ -152,13 +150,16 @@ class Setup:
 
     def step_database(self):
         self.sql(f"CREATE SCHEMA IF NOT EXISTS {self.schema}")
+        # btree_gist: the (map_id, box) GiST index on linedef_geom (sql/indexes.sql);
+        # pg_prewarm: a new game's branch loads its tables into the cache
+        self.sql(f"CREATE EXTENSION IF NOT EXISTS btree_gist SCHEMA {self.schema}")
         self.sql(f"CREATE EXTENSION IF NOT EXISTS pg_prewarm SCHEMA {self.schema}")
         try:
             self.sql(f"ALTER DATABASE {self.db} SET work_mem = '64MB'")
         except Exception as exc:     # needs the database owner; the game runs without it, slower
             log(f"work_mem not set ({str(exc).splitlines()[0]}): ask the database owner to run "
                 f"ALTER DATABASE {self.db} SET work_mem = '64MB'")
-        log(f"schema {self.schema} and pg_prewarm ready")
+        log(f"schema {self.schema}, btree_gist and pg_prewarm ready")
 
     def loaded_maps(self):
         rows = self.sql("SELECT to_regclass(%s) IS NOT NULL", (f"{self.schema}.maps",), fetch=True)
@@ -175,94 +176,24 @@ class Setup:
             raise RuntimeError("Setup(wad=...) is needed: the path of DOOM1.WAD, e.g. in a Unity Catalog volume")
         if not Path(self.wad).is_file():
             raise RuntimeError(f"{self.wad}: no such file (upload DOOM1.WAD there first)")
-        # In this process, as run_on_lakebase.py does from the command line:
-        # compat SQL, then upstream's loader with the CedarScript translator.
-        import psycopg2
-        import run_on_lakebase as rol
-        import cedar2plpgsql as c2p
-        # The translator's targeted fixes expect one function per statement; the
-        # loader sends whole runtime files, where an anchor can match several
-        # functions ("expected 1 match, found 3", tested 2026-11-13). The
-        # functions it installs are all replaced by sql_frozen/ in step sql,
-        # so here an ambiguous fix is skipped instead of stopping the load.
-        strict_fixes = c2p.apply_targeted_fixes
-        skipped = []
-
-        def lenient_fixes(sql):
-            for fn, old, new, _why in c2p.TARGETED_FIXES:
-                if re.search(rf"FUNCTION\s+{fn}\s*\(", sql, re.I) and sql.count(old) > 1:
-                    skipped.append(fn)
-                    sql = sql   # left as translated; replaced by sql_frozen/
-            try:
-                return strict_fixes(sql)
-            except c2p.TranspileError:
-                return sql
-
-        env_before = {k: os.environ.get(k) for k in ("LAKEBASE_ENDPOINT", "LAKEBASE_DB", "LAKEBASE_SCHEMA", "DB_DSN")}
-        connect_before, argv_before, cwd_before = psycopg2.connect, sys.argv, os.getcwd()
-        os.environ.update(LAKEBASE_ENDPOINT=self.endpoint, LAKEBASE_DB=self.db, LAKEBASE_SCHEMA=self.schema)
+        have = self.loaded_maps()
+        if have:
+            # The loader fills an empty world (one WAD record, the definitions once).
+            raise RuntimeError(f"{self.schema} holds some maps already ({', '.join(sorted(have))}), not "
+                               f"{', '.join(missing)}: start again from an empty schema {self.schema}")
+        from sqldoom import db, wad
         t0 = time.time()
+        conn = self.connect(role=self.role)
         try:
-            dsn = rol.lakebase_dsn()
-            os.environ["DB_DSN"] = dsn
-            # postgres_compat.sql now also adds to upstream's tables (mp_players
-            # ...), so on an empty schema it can only run after the loader
-            # (tested 2026-11-13 on a new project); on a reload it runs first,
-            # as run_on_lakebase.py does.
-            compat_first = True
-            try:
-                rol.apply_compat(dsn)
-            except Exception as exc:
-                compat_first = False
-                log(f"postgres_compat.sql before the load: {str(exc).splitlines()[0]} (empty schema)")
-            rol.install_shim(str(REPO))
-            c2p.apply_targeted_fixes = lenient_fixes
-            os.chdir(REPO)
-            if not compat_first:
-                # Upstream's tables first, then the compat SQL: the translated
-                # runtime calls its doom_caller() (tested 2026-11-13 on a new
-                # project: "function doom_caller() does not exist").
-                import wad_loader
-                conn = psycopg2.connect(dsn)
-                try:
-                    conn.autocommit = True
-                    with conn.cursor() as cur:
-                        wad_loader.apply_schema(cur, wad_loader.DEFAULT_SCHEMA)
-                finally:
-                    conn.close()
-                rol.apply_compat(dsn)
-                log("upstream schema, then postgres_compat.sql applied")
-            loader = str(REPO / "wad_loader.py")
-            sys.argv = [loader, self.wad, *self.maps, "--dsn", dsn]
-            log(f"loading {', '.join(self.maps)} from {self.wad} (the slow step)")
-            try:
-                runpy.run_path(loader, run_name="__main__")
-            except SystemExit as exc:
-                if exc.code not in (0, None):
-                    raise RuntimeError(f"wad_loader.py exited with {exc.code}") from exc
-            # Again after the load in any case: its derived tables come from the
-            # WAD data (colormap_idx_lvl from colormap_rgb: empty when the
-            # compat SQL ran first on a new project, tested 2026-11-13) and its
-            # table settings cover tables the loader created.
-            psycopg2.connect = connect_before
-            rol.apply_compat(dsn)
-            log("postgres_compat.sql applied again after the load")
+            db.install(conn)
+            log(f"loading {', '.join(self.maps)} from {self.wad}")
+            wad.load(conn, self.wad, self.maps)
         finally:
-            psycopg2.connect, sys.argv = connect_before, argv_before   # the translator stays out of the next steps
-            c2p.apply_targeted_fixes = strict_fixes
-            os.chdir(cwd_before)
-            if skipped:
-                log(f"translator fixes skipped during the load (functions replaced by sql_frozen/ next): "
-                    f"{', '.join(sorted(set(skipped)))}")
-            for k, v in env_before.items():
-                if v is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = v
+            conn.close()
         log(f"maps loaded in {time.time() - t0:.0f} s: {sorted(self.loaded_maps())}")
 
     def step_owner(self):
-        text = (HERE / "setup_doom_owner.sql").read_text(encoding="utf-8")
+        text = (HERE / "doom_owner.sql").read_text(encoding="utf-8")
         part1 = text.split("-- PART 2")[0]
         part3 = text.split("-- PART 3")[1]
         # Part 1 again on a later run: the role exists, the ownership loop is idempotent.
@@ -278,7 +209,7 @@ class Setup:
                 left = cur.fetchone()
                 if tuple(left) != (0, 0, 0, "doom_owner"):
                     conn.rollback()
-                    raise RuntimeError(f"setup_doom_owner.sql part 1 left {left} (want 0, 0, 0, doom_owner): rolled back")
+                    raise RuntimeError(f"doom_owner.sql part 1 left {left} (want 0, 0, 0, doom_owner): rolled back")
             conn.commit()
             conn.autocommit = True
             with conn.cursor() as cur:
@@ -288,19 +219,14 @@ class Setup:
         log("role doom_owner owns schema doom and everything in it; schema lobby ready")
 
     def step_sql(self):
-        from doomapp import frozen
+        from sqldoom import db
         conn = self.connect(role=self.role)
         try:
-            with conn.cursor() as cur:
-                cur.execute(f"SET search_path = {self.schema}")
-                cur.execute((HERE / "table_settings.sql").read_text(encoding="utf-8"))
-            log("table settings applied (table_settings.sql)")
-            frozen.apply(conn, log=log)
-            left = frozen.apply(conn, dry_run=True, log=log)["counts"]
+            st = db.install(conn)
         finally:
             conn.close()
-        if left:
-            raise RuntimeError(f"after apply, still different from sql_frozen/: {left}")
+        if not st["up_to_date"]:
+            raise RuntimeError(f"after install, the game's SQL is still not up to date: {st}")
 
     def _app_role(self, branch):
         """The Lakebase role of the app's service principal on a branch, or None."""
@@ -441,7 +367,7 @@ class Setup:
             # Games are copied from the template, so that is the branch that
             # counts (the default branch only gets the SQL before the template
             # exists; afterwards the app refreshes the template itself).
-            from doomapp import frozen
+            from sqldoom import db
             try:
                 eps = list(self.w.postgres.list_endpoints(parent=f"{self.project}/branches/{self.template}"))
                 ep, where = eps[0].name, self.template
@@ -449,10 +375,18 @@ class Setup:
                 ep, where = self.endpoint, self.branch.rsplit("/", 1)[-1]
             conn = self.connect(role=self.role, endpoint=ep)
             try:
-                left = frozen.apply(conn, dry_run=True, log=lambda m: None)["counts"]
+                st = db.status(conn)
+                with conn.cursor() as cur:
+                    cur.execute("SELECT count(*) FROM pg_class WHERE relnamespace = %s::regnamespace "
+                                "AND relkind = 'v' AND relname ~ '^api_frame_idx_slot'", (self.schema,))
+                    frames = cur.fetchone()[0]
             finally:
                 conn.close()
-            return not left, f"{where} differs from sql_frozen/: {left or 'nothing'}"
+            # Before the app's first start the template may still hold an older
+            # version: the app installs the current one then (games wait for it).
+            return frames > 0, (f"{where}: code {st['installed'] or 'none'} "
+                                f"({'current' if st['up_to_date'] else 'the app installs ' + st['code'] + ' at its start'}), "
+                                f"{frames} frame views")
 
         def template():
             name = f"{self.project}/branches/{self.template}"
@@ -495,10 +429,10 @@ class Setup:
         log(f"all done in {time.time() - t0:.0f} s: {', '.join(names)}")
 
     def deploy(self, source_code_path=None):
-        """Deploy the app from a workspace folder (default: this folder). A
+        """Deploy the app from a workspace folder (default: this repository). A
         deployment only works on a running app: started first if stopped."""
         from databricks.sdk.service import apps as A
-        path = source_code_path or str(HERE)
+        path = source_code_path or str(REPO)
         if not path.startswith("/Workspace"):
             raise RuntimeError(f"{path}: deploy needs the folder's workspace path (/Workspace/...)")
         app = self.w.apps.get(name=self.app_name)

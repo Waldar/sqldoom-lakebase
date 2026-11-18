@@ -73,7 +73,7 @@ MAX_PLAYERS = 4                              # the game loop's 4 seats
 SEATS_POLL_S = 3.0
 LIVE = ("creating", "warming", "starting", "ready")
 # The lobby schema itself is created once by the database owner, owned by
-# doom_owner (setup_doom_owner.sql): doom_owner has no CREATE on the database.
+# doom_owner (setup/doom_owner.sql): doom_owner has no CREATE on the database.
 LOBBY_DDL = """
 CREATE TABLE IF NOT EXISTS lobby.games (
     game_id    text PRIMARY KEY,
