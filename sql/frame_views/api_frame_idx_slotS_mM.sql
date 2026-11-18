@@ -23,7 +23,10 @@ WITH RECURSIVE render_context AS NOT MATERIALIZED (
            (SELECT mm.skill FROM mp_match mm LIMIT 1) AS skill,
            CASE WHEN (SELECT mm.skill FROM mp_match mm LIMIT 1)<=1 THEN 1 WHEN (SELECT mm.skill FROM mp_match mm LIMIT 1)=2 THEN 2 ELSE 4 END
              AS skill_bit
-), pos AS NOT MATERIALIZED (
+), pos AS MATERIALIZED (
+    -- MATERIALIZED here (NOT MATERIALIZED in LBDoom): LBDoom's pose is
+    -- parameters, ours a lookup in mp_players, which inlined ran ~8,000 times a
+    -- frame (54 pages instead of 7,996), more as a live game's mp_players grows.
     -- The camera pose is passed in rather than read from the player Thing, so
     -- the client can render intermediate poses between the 35 Hz gameplay tics.
     SELECT mp.pose_x::float8 AS x, mp.pose_y::float8 AS y, mp.pose_z::float8 AS z, mp.pose_angle::float8 AS angle FROM mp_players mp WHERE mp.map_id = {map_id} AND mp.slot = {slot} AND mp.role_name = doom_caller()
