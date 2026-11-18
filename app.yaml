@@ -1,36 +1,26 @@
-# SQLDoom on Lakebase (Databricks App). Phase 5 adds the Lakebase resource and
-# the service principal's grants on the doom schema; until then the endpoint
-# is plain config.
-command: ["python", "app.py"]
+# SQLDoom on Lakebase (Databricks App): the package under src/ (sqldoom.server.app).
+command: ["python", "-m", "sqldoom.server.app"]
 env:
+  - name: PYTHONPATH
+    value: "src"
+  # The production branch: the lobby (one row per game) and the menu's default rules.
   - name: LAKEBASE_ENDPOINT
     value: "projects/sqldoom/branches/production/endpoints/primary"
   - name: LAKEBASE_DB
     value: "databricks_postgres"
   - name: LAKEBASE_SCHEMA
     value: "doom"
-  # Every game runs on its own branch (doomapp/games.py); the production
-  # branch only holds the lobby since 2026-11-11, so no shared match runs on
-  # it (1 = the old shared match's referee on the production primary).
-  - name: DOOM_REFEREE
-    value: "0"
-  # Size of a single-player game's branch (doomapp/games.py; 16 by default).
+  # Size of a single-player game's branch (sqldoom/lakebase/games.py; 16 by default).
   # 24 CU since 2026-11-12, as Ilia Chibaev's LBDoom: room for the tic and
   # several frames side by side. The project default is 24 CU too, so a solo
   # branch is born at its size; multiplayer (32 CU) switches it for its creation.
   - name: DOOM_SOLO_CU
     value: "24"
-  # Stage 2 (render on read replicas) is off since 2026-10-23: the primary is
-  # 32 CU and runs up to 6 render connections per player; the replicas' replay lag
-  # was not worth it. To bring it back, list the read-only endpoints here
-  # (one render connection per replica: overlapping renders stall replay):
-  # - name: LAKEBASE_REPLICA_ENDPOINTS
-  #   value: "projects/sqldoom/branches/production/endpoints/sqldoom-read-replica-1,..."
   # Render connections per player at page load (1, 2, 4 or 6; the page can change it).
-  # 6 is the most the 32 CU primary takes next to the game loop (8 put the tic over budget).
+  # 6 is the most a 32 CU endpoint takes next to the game loop (8 put the tic over budget).
   - name: DOOM_RENDER_CONNS
     value: "4"
-  # Status-bar cache writer (doomapp/referee.py): check interval, 0 = off.
+  # Status-bar cache writer (sqldoom/game/referee.py): check interval, 0 = off.
   - name: DOOM_HUD_INTERVAL_MS
     value: "100"
   - name: DOOM_MAX_FPS

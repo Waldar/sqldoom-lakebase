@@ -243,7 +243,7 @@
 
 <main class="layout">
   <section>
-    <!-- the full game (upstream page, embedded); the stage selects where frames render -->
+    <!-- the game (web/game/, embedded) -->
     <div class="pane" id="pane">
       <div class="pane-label">frames from <b id="pane-label">Lakebase Primary</b></div>
       <iframe id="game" allow="autoplay; fullscreen"></iframe>
@@ -377,11 +377,6 @@
           <div class="num"><div class="big" id="m-rtt">&mdash;<small>ms</small></div>
             <div class="lbl">round trip from your browser &middot; <span id="m-rtt-sub"></span></div></div>
           <svg class="spark" id="sp-rtt" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
-        </div>
-        <div class="metric">
-          <div class="num"><div class="big" id="m-lag">&mdash;<small>tics</small></div>
-            <div class="lbl" id="m-lag-sub">replica lag behind the primary</div></div>
-          <svg class="spark" id="sp-lag" viewBox="0 0 84 30" preserveAspectRatio="none"><polyline/></svg>
         </div>
         <div class="metric">
           <div class="num"><div class="big" id="m-wire">&mdash;<small>KB/s</small></div>

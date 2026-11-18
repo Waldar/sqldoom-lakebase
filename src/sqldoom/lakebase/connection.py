@@ -7,10 +7,8 @@ when a connection logs in, so long-lived sessions survive its expiry and only
 new logins need a fresh one.
 
 Env:
-  LAKEBASE_ENDPOINT          primary endpoint (default projects/sqldoom/branches/production/endpoints/primary)
-  LAKEBASE_REPLICA_ENDPOINTS optional read-only endpoints, comma-separated: panes replica1..N
-                             (stage 2; the render pool spreads its connections over them)
-  LAKEBASE_REPLICA_ENDPOINT  older single-replica form, used when the list is not set
+  LAKEBASE_ENDPOINT          the production branch's endpoint, which holds the lobby
+                             (default projects/sqldoom/branches/production/endpoints/primary)
   LAKEBASE_DB (databricks_postgres), LAKEBASE_SCHEMA (doom)
   LAKEBASE_USER              Postgres role to log in as (default: the caller's Databricks user name)
   LAKEBASE_TOKEN_REFRESH_S   reuse a token for this long (default 2400 s; tokens last 1 h)
@@ -28,20 +26,14 @@ DB = os.getenv("LAKEBASE_DB", "databricks_postgres")
 SCHEMA = os.getenv("LAKEBASE_SCHEMA", "doom")
 TOKEN_REFRESH_S = float(os.getenv("LAKEBASE_TOKEN_REFRESH_S", "2400"))
 # Every session: the game schema, and commits that do not wait for the WAL to
-# be durable on the safekeepers (~4 ms per tic; see run_on_lakebase.py).
+# be durable on the safekeepers (~4 ms per tic).
 SESSION_OPTIONS = f"-c search_path={SCHEMA} -c synchronous_commit=off"
 
 
 def endpoints():
-    """Render pane name -> Lakebase endpoint resource name (configured ones only)."""
-    eps = {"primary": os.getenv("LAKEBASE_ENDPOINT",
-                                "projects/sqldoom/branches/production/endpoints/primary")}
-    replicas = [e.strip() for e in os.getenv("LAKEBASE_REPLICA_ENDPOINTS", "").split(",") if e.strip()]
-    if not replicas and os.getenv("LAKEBASE_REPLICA_ENDPOINT"):
-        replicas = [os.environ["LAKEBASE_REPLICA_ENDPOINT"]]
-    for i, ep in enumerate(replicas, 1):
-        eps[f"replica{i}"] = ep
-    return eps
+    """Pane name -> Lakebase endpoint resource name: the production primary."""
+    return {"primary": os.getenv("LAKEBASE_ENDPOINT",
+                                 "projects/sqldoom/branches/production/endpoints/primary")}
 
 
 class Credentials:

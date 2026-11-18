@@ -13,7 +13,7 @@ rule set (mp_rules, see postgres_compat.sql):
 Fixed by mode, not settable: keys (in the level / everyone holds all),
 multiplayer-only items (off / on), and death_restart is solo only.
 
-The caller is identified like the relay does (doomapp.relay.player_identity):
+The caller is identified like the relay does (sqldoom.server.relay.player_identity):
 the proxy's X-Forwarded-Email plus the browser tab's token.
 """
 import os

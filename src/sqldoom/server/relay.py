@@ -1,18 +1,18 @@
-"""Browser <-> Lakebase relay: upstream doom_web.py's WebSocket tunnel, for the app.
+"""Browser <-> Lakebase relay: the game page's Postgres connection.
 
-The page (web/app.js + web/pgwire.js) speaks the Postgres protocol over a
-WebSocket at /pg?target=<pane>. Differences from doom_web.py:
+The game page (web/game/app.js + web/game/pgwire.js) speaks the Postgres
+protocol over a WebSocket at /pg?game=<id>. The relay tunnels it to the
+game's Lakebase endpoint:
 
-  * Login is done here, with OAuth. The relay opens TLS to the pane's Lakebase
+  * Login is done here, with OAuth. The relay opens TLS to the Lakebase
     endpoint and logs in as the app's identity with a fresh OAuth token. The
     browser's own startup message is swallowed and answered with
     AuthenticationOk plus the real session's ParameterStatus / BackendKeyData /
     ReadyForQuery. The browser never sees a password or token. With ?guest=1
-    the page is first told the role it plays as, the same way doom_web.py hands
-    out guest seats.
+    the page is first told the role it plays as.
   * Statement allowlist. Every browser session runs as the app identity, which
-    has more than the api_* grants a player role has upstream. So only the SQL
-    text web/app.js uses may be parsed or run (Query / Parse messages; Bind and
+    has more than the api_* grants a player needs. So only the SQL
+    text web/game/app.js uses may be parsed or run (Query / Parse messages; Bind and
     Execute only reach statements that passed Parse). Anything else ends the
     tunnel with an ErrorResponse.
   * Frame timing. The relay times each request from the browser's Sync (or
@@ -21,24 +21,58 @@ WebSocket at /pg?target=<pane>. Differences from doom_web.py:
     without the browser's network leg.
 
 Compression is the WebSocket server's permessage-deflate (uvicorn +
-websockets) instead of doom_web.py's own. Delta frames ("pg-delta") reuse
-doom_web.DeltaCoder unchanged.
+websockets). With the "pg-delta" subprotocol, frames are delta-coded
+(DeltaCoder below; pgwire.js decodes them).
 """
 import asyncio
 import json
 import re
 import struct
-import sys
 import time
 from collections import deque
-from pathlib import Path
 
-from .lakebase import AUTH_OK, CREDS, error_response, open_session
+from sqldoom.lakebase.connection import AUTH_OK, CREDS, error_response, open_session
 
-_REPO = Path(__file__).resolve().parent.parent / "sqldoom"
-if str(_REPO) not in sys.path:
-    sys.path.append(str(_REPO))
-from doom_web import DELTA_MIN, DeltaCoder  # noqa: E402  (upstream, unmodified)
+DELTA_MIN = 32768   # a binary column at least this long is a frame worth delta-coding
+
+
+class DeltaCoder:
+    """XOR large DataRow columns against the previous one of the same length.
+    Both ends see the same ordered stream, so "previous" means the same thing
+    on both sides; the first frame of each size goes through unchanged."""
+
+    def __init__(self):
+        self.buf = bytearray()
+        self.prev = {}
+        self.frames = 0
+
+    def feed(self, chunk):
+        self.buf.extend(chunk)
+        out = bytearray()
+        while len(self.buf) >= 5:
+            length = int.from_bytes(self.buf[1:5], "big")
+            if len(self.buf) < 1 + length:
+                break
+            msg = bytes(self.buf[:1 + length])
+            del self.buf[:1 + length]
+            out.extend(self._code(msg) if msg[0] == 0x44 else msg)   # 'D'
+        return bytes(out)
+
+    def _code(self, msg):
+        ncols = int.from_bytes(msg[5:7], "big")
+        if ncols != 1:
+            return msg
+        clen = int.from_bytes(msg[7:11], "big", signed=True)
+        if clen < DELTA_MIN or 11 + clen != len(msg):
+            return msg
+        cell = msg[11:]
+        prev = self.prev.get(clen)
+        self.prev[clen] = cell
+        self.frames += 1
+        if prev is None:
+            return msg
+        coded = (int.from_bytes(cell, "big") ^ int.from_bytes(prev, "big")).to_bytes(clen, "big")
+        return msg[:11] + coded
 
 
 def log(message):
@@ -75,9 +109,6 @@ ALLOWED_SQL = frozenset({
     "SELECT kind, name, x, y, angle, alive FROM api_things_live WHERE map_id = $1",
 })
 ALLOWED_RE = re.compile(r"SELECT frame_rgb FROM api_frame_idx_slot[1-4]_m\d{1,3}(_low)?")
-# CedarDB's async_commit is Postgres's synchronous_commit=off (already the
-# session default here); answering it keeps the page's console quiet.
-REWRITES = {"SET async_commit = on": "SET synchronous_commit = off"}
 # Frontend messages a page may send: Query, Parse, Bind, Execute, Describe,
 # Close, Sync, Flush, Terminate. No COPY, no FunctionCall.
 ALLOWED_KINDS = frozenset(b"QPBEDCSHX")
@@ -97,8 +128,6 @@ def _cstring(msg, off):
 
 
 def check_statement(sql):
-    if sql in REWRITES:
-        return REWRITES[sql]
     if sql in ALLOWED_SQL or ALLOWED_RE.fullmatch(sql):
         return sql
     raise Refused(f"statement not allowed through the app relay: {sql[:120]!r}")
@@ -123,7 +152,7 @@ def check_message(msg):
 
 # ---------------------------------------------------------- frame timing
 class FrameWatch(DeltaCoder):
-    """doom_web.DeltaCoder that also times requests. Each Sync or Query the
+    """DeltaCoder that also times requests. Each Sync or Query the
     browser sends starts a clock; the ReadyForQuery that answers it stops it,
     and the time counts as a frame if the answer carried a frame-sized column."""
 
@@ -267,7 +296,7 @@ def player_identity(ws):
     """The player a tunnel plays as: the signed-in user (Databricks Apps puts
     it in X-Forwarded-Email) plus the browser tab's token (?tab=, from the
     page's sessionStorage), so two tabs are two players. Every connection of
-    one tab (control + render pool, primary and replicas) carries the same
+    one tab (control + render pool) carries the same
     token, so they all resolve to the same seat. A page can only pick the
     tab part: the user part comes from the proxy."""
     return identity_from(ws.headers, ws.query_params.get("tab", ""))
@@ -280,30 +309,24 @@ def identity_from(h, tab):
             or h.get("x-forwarded-user") or "")
     user = _ID_UNSAFE.sub("", user)[:96]
     if not user:
-        return None                      # no proxy (local run): upstream behaviour, session_user
+        return None                      # no proxy (local run): the session user plays
     tab = tab or ""
     return f"{user}#{tab}" if _TAB_RE.fullmatch(tab) else user
 
 
 async def serve(ws, pane, guest, endpoint_map, metrics, games=None, game_id=""):
-    """One browser WebSocket, bridged to one Lakebase session on `pane`'s endpoint.
-    With game_id (one branch per game, doomapp/games.py): the game's endpoint,
-    primary only, and only for a player the game lets in (a solo game: its owner)."""
-    if game_id:
-        if games is None or pane != "primary":
-            await ws.close(code=1008, reason="games run on their primary only")
-            return
-        try:
-            endpoint = games.endpoint_for(game_id, player_identity(ws))
-            metrics = games.game(game_id).metrics
-        except Exception as exc:
-            log(f"{getattr(ws.client, 'host', '?')} game {game_id} refused: {exc}")
-            await ws.close(code=1008, reason=str(exc)[:120])
-            return
-    else:
-        endpoint = endpoint_map.get(pane)
-    if endpoint is None:
-        await ws.close(code=1008, reason="unknown render target")
+    """One browser WebSocket, bridged to one Lakebase session on the game's
+    endpoint (one branch per game, sqldoom.lakebase.games), only for a player
+    the game lets in (a solo game: its owner)."""
+    if not game_id or games is None or pane != "primary":
+        await ws.close(code=1008, reason="which game? (/pg?game=<id>)")
+        return
+    try:
+        endpoint = games.endpoint_for(game_id, player_identity(ws))
+        metrics = games.game(game_id).metrics
+    except Exception as exc:
+        log(f"{getattr(ws.client, 'host', '?')} game {game_id} refused: {exc}")
+        await ws.close(code=1008, reason=str(exc)[:120])
         return
     delta = "pg-delta" in ws.scope.get("subprotocols", [])
     await ws.accept(subprotocol="pg-delta" if delta else None)

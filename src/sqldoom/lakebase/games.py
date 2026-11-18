@@ -5,8 +5,8 @@ Every game runs on its own branch of the project, made from `game-template`
 The `production` branch keeps the lobby: lobby.games, one row per game.
 
   template   game-template (no expiry): the schema, data and the game's SQL
-             (sql_frozen/, doomapp/frozen.py). At app start it is refreshed
-             when sql_frozen/ changed (the objects that differ are replaced,
+             (sql/, installed by sqldoom.db). At app start it is refreshed
+             when sql/ changed (pending migrations, then the code reinstalled,
              then every map reset and the tables compacted); games wait for it.
   create     branch g-<id> from the template (TTL as a safety net), size its
              endpoint (solo 16 CU = the project default, multi 32 CU: a resize
@@ -30,7 +30,7 @@ The `production` branch keeps the lobby: lobby.games, one row per game.
              it is open), or the owner quits: referee stopped, branch deleted.
   restart    an app restart resumes every live game (the state is in its
              branch): its referee starts again on the map the game was on
-             (the level itself restarts: doom_server opens a fresh match);
+             (the level itself restarts: the game loop opens a fresh match);
              games still being created are failed and their branch deleted. g-* branches without a live
              lobby row are deleted.
 
@@ -44,15 +44,13 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 import psycopg2
 
-from doomapp import frozen
-from doomapp.metrics import Metrics
-from doomapp.referee import Referee
+from sqldoom import db
+from sqldoom.game.referee import Referee
+from sqldoom.server.metrics import Metrics
 
-HERE = Path(__file__).resolve().parent.parent
 PROJECT = os.getenv("LAKEBASE_PROJECT", "projects/sqldoom")
 TEMPLATE = os.getenv("DOOM_TEMPLATE_BRANCH", "game-template")
 LOBBY_ENDPOINT = os.getenv("LAKEBASE_ENDPOINT", f"{PROJECT}/branches/production/endpoints/primary")
@@ -63,15 +61,15 @@ IDLE_END_S = int(os.getenv("DOOM_GAME_IDLE_S", "180"))
 PREWARM_CONNS = int(os.getenv("DOOM_PREWARM_CONNS", "16"))
 BRANCH_PREFIX = "g-"
 GAME_ENV = {}                                # the game referee's own env
-# IDLE_SECONDS (doom_server): a seat whose page is silent that long is freed
-# and its player killed (5 s upstream). A background tab's timers slow down
+# IDLE_SECONDS (sqldoom.game.server): a seat whose page is silent that long is freed
+# and its player killed (5 s by default). A background tab's timers slow down
 # (Chrome: to once a minute after 5 min), so 5 s lost the player's place on
 # a tab switch. A solo game keeps the seat past its own idle end (the game is
 # gone by then) and pauses while the tab is hidden (DOOM_PAUSE, away());
 # a multi game keeps an absent player's seat 90 s, the world going on.
 MODE_ENV = {"solo": {"IDLE_SECONDS": str(IDLE_END_S + 60), "DOOM_PAUSE": "1"},
             "multi": {"DOOM_START_MODE": "deathmatch", "DOOM_KEEP_MODE": "1", "IDLE_SECONDS": "90"}}
-MAX_PLAYERS = 4                              # doom_server's 4 slots
+MAX_PLAYERS = 4                              # the game loop's 4 seats
 SEATS_POLL_S = 3.0
 LIVE = ("creating", "warming", "starting", "ready")
 # The lobby schema itself is created once by the database owner, owned by
@@ -110,13 +108,10 @@ class GameError(Exception):
 
 
 def code_version():
-    """What the template holds: sql_frozen/ (doomapp/frozen.py) alone, so
-    Python changes do not refresh it."""
-    if not frozen.available():
-        raise RuntimeError("sql_frozen/manifest.json missing: the template needs the frozen SQL")
-    # "-c1": the template is compacted after its reset (_reset_template);
-    # bumped once so the live template gets it
-    return "frozen-" + frozen.version() + "-c1"
+    """What the template holds: the SQL under sql/ alone (its code and its
+    last migration), so Python changes do not refresh it."""
+    migrations = sorted((db.SQL_ROOT / "migrations").glob("*.sql"))
+    return f"db-{db.code_version()}-{migrations[-1].stem if migrations else 'none'}"
 
 
 class Game:
@@ -308,11 +303,11 @@ class GameManager:
             self.template_state = "refreshing"
             print(f"[games] template {TEMPLATE}: installing code {version}", flush=True)
             t0 = time.time()
-            # plain SQL files: only the objects that differ are replaced
+            # pending migrations, then the code (sqldoom.db), in one transaction
             conn = psycopg2.connect(self.creds.dsn(ep.name, application_name="sqldoom-template",
                                                    role=os.getenv("DOOM_DB_ROLE") or None))
             try:
-                frozen.apply(conn, log=lambda m: print(f"[games] template {TEMPLATE}: {m}", flush=True))
+                db.install(conn)
             finally:
                 conn.close()
             self._reset_template(ep.name)
@@ -528,8 +523,8 @@ class GameManager:
             print(f"[games] {g.game_id}: endpoint size not read: {str(exc)[:160]}", flush=True)
 
     def _resume_game(self, g):
-        """After an app restart: the referee opens the match again (doom_server
-        always starts a fresh level), on the map the game was on."""
+        """After an app restart: the referee opens the match again (the game
+        loop always starts a fresh level), on the map the game was on."""
         try:
             conn = psycopg2.connect(self.creds.dsn(g.endpoint, application_name="sqldoom-lobby",
                                                    role=os.getenv("DOOM_DB_ROLE") or None))

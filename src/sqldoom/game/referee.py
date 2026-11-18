@@ -1,16 +1,13 @@
-"""The match referee (upstream doom_server.py), supervised, in its own process.
+"""The match referee: the game loop (sqldoom.game.server), supervised, in its own process.
 
 The referee is the only writer of the game world: it runs doom_run_mp_tic at
-35 Hz on the primary. It runs the unmodified doom_server.main in a child
-process, so the relay's Python work cannot steal the GIL from the tic clock,
-and SIGTERM reaches doom_server's own handler (graceful referee release).
-The game's SQL is on the branch already (sql_frozen/, doomapp/frozen.py): the
-referee installs nothing, it only opens the match. (Until 2026-11-13 it also
-rewrote functions and frame views at every start.) doom_server still runs
-through run_on_lakebase's shim: upstream's client statements (doom_sql.py)
-are CedarDB SQL and are translated when they are prepared.
+35 Hz on the game's branch. It runs server.main in a child process, so the
+relay's Python work cannot steal the GIL from the tic clock, and SIGTERM
+reaches the loop's own handler (graceful referee release). The game's SQL is
+on the branch already (installed from sql/ by sqldoom.db): the referee
+installs nothing, it only opens the match.
 
-Every doom_sql.mp_tic call is timed in the child and sent to the parent's
+Every statements.mp_tic call is timed in the child and sent to the parent's
 Metrics over a queue. If the child dies (a dropped connection, another referee
 holding the heartbeat) it is started again with a fresh token after a backoff.
 The parent resolves the DSN (host + OAuth token) and hands it to the child,
@@ -51,9 +48,9 @@ have dead rows.
 Map change from the page (Referee.request_map, POST /api/match/map): the
 parent puts the request on a command queue; the child picks it up after a
 tic, writes the map into mp_map_request (unless it is "next") and reports
-that tic as the end of the level. doom_server then runs its own rotation:
+that tic as the end of the level. The game loop then runs its own rotation:
 the intermission (frag table, INTERMISSION_SECONDS) and doom_mp_rotate, whose
-doom_mp_next_map returns the requested map (sql_frozen/functions).
+doom_mp_next_map returns the requested map (sql/functions/multiplayer).
 Seats carry over as on any map change.
 """
 import multiprocessing
@@ -62,12 +59,9 @@ import queue
 import sys
 import threading
 import time
-from pathlib import Path
 
-HERE = Path(__file__).resolve().parent.parent
-REPO = HERE / "sqldoom"
 # ROTATION: all of episode 1 (doom1.wad). Maps that are not loaded yet are
-# skipped by doom_server ("rotation: E1Mx is not loaded, skipped").
+# skipped by the game loop ("rotation: E1Mx is not loaded, skipped").
 # Game modes (see _mode_step): the match starts solo -- monsters, nothing
 # respawns -- so ALTDEATH and RESPAWN_MONSTERS are off; deathmatch turns item
 # respawn on and the monsters off when it starts.
@@ -75,33 +69,25 @@ REFEREE_ENV = {"MAP_ID": "1", "SKILL": "2",
                "ROTATION": "E1M1,E1M2,E1M3,E1M4,E1M5,E1M6,E1M7,E1M8,E1M9",
                "TIMER_TICS": "0", "HOLD_MINUTES": "0",
                "ALTDEATH": "0", "MONSTERS": "1", "RESPAWN_MONSTERS": "0"}
-# Upper bound on one intermission in doom_server.rotate() (it gives up after
+# Upper bound on one intermission in server.rotate() (it gives up after
 # INTERMISSION_SECONDS + 20): the end of a deathmatch waits up to 30 s for
 # the choice, plus a 10 s countdown when someone joins meanwhile.
 _INTERMISSION_GUARD_S = 60
 
 
 def _child(samples, dsn, commands=None, env=None):
-    """Child process body: timing and vacuum hooks, then doom_server.main().
-    env: settings for this referee only (a game branch's, see doomapp/games.py)."""
+    """Child process body: timing and vacuum hooks, then server.main().
+    env: settings for this referee only (a game branch's, see sqldoom/lakebase/games.py)."""
     os.environ.update(env or {})
     for k, v in REFEREE_ENV.items():
         os.environ.setdefault(k, v)
-    for p in (str(HERE), str(REPO)):
-        if p not in sys.path:
-            sys.path.insert(0, p)
-    import run_on_lakebase as rol
-    from doomapp import frozen
-    os.environ["DB_DSN"] = dsn          # doom_config reads it at import
-    # The branch holds the game's SQL: sql_frozen/ (doomapp/frozen.py), applied
-    # to game-template at its refresh. The referee installs nothing; it only
-    # opens the match (mode, rules, world flags).
-    if not frozen.available():
-        raise SystemExit("sql_frozen/manifest.json missing: the referee needs the frozen SQL")
-    print(f"[referee] SQL from sql_frozen/ (version {frozen.version()}): nothing installed at start", flush=True)
+    os.environ["DB_DSN"] = dsn          # server.main() connects with it
+    # The branch holds the game's SQL (sqldoom.db, installed on game-template
+    # at its refresh). The referee installs nothing; it only opens the match
+    # (mode, rules, world flags).
     # A referee start opens a solo match: its first map uses the solo rules
-    # (mp_rules, set from the page by Player 1). doom_server reads these at import.
-    # DOOM_START_MODE=deathmatch (a multiplayer game's branch, doomapp/games.py)
+    # (mp_rules, set from the page by Player 1). server reads these at import.
+    # DOOM_START_MODE=deathmatch (a multiplayer game's branch, sqldoom/lakebase/games.py)
     # opens it with the multiplayer rules instead: no monsters spawned, items
     # respawn, keys for all, from the first tic, without the countdown.
     start_mode = os.environ.get("DOOM_START_MODE", "")
@@ -118,13 +104,8 @@ def _child(samples, dsn, commands=None, env=None):
                               ALTDEATH="1" if _r[2] else "0", RESPAWN_MONSTERS="1" if _r[3] else "0")
     except Exception as exc:
         print(f"[referee] solo rules not read, using the defaults: {exc}", flush=True)
-    # The shim stays: upstream doom_sql.py prepares its client statements in
-    # CedarDB syntax (ARG_MAX, ...) at every start, and the shim translates
-    # them (tested 2026-11-13: without it, PREPARE fails on arg_max).
-    rol.install_shim(str(REPO))
-    os.chdir(REPO)
-    import doom_sql
-    real_tic = doom_sql.mp_tic
+    from sqldoom.game import statements as stmts
+    real_tic = stmts.mp_tic
 
     # --- referee-driven VACUUM (see the module docstring) -------------------
     _VACUUM_INTERVAL = int(os.environ.get("DOOM_VACUUM_INTERVAL", "1050"))  # ~30 s
@@ -208,7 +189,7 @@ def _child(samples, dsn, commands=None, env=None):
             # by the next queued table, and logged "0 tables ... in 3.1 s":
             # the time until the player joined. A new game branch starts with
             # empty statistics, so the referee-start pass finds no table; the
-            # template is compacted instead, doomapp/games.py _reset_template.)
+            # template is compacted instead, sqldoom/lakebase/games.py _reset_template.)
             print(f"[referee] VACUUM FULL ({why}): no table written since the statistics began", flush=True)
             return
         if full:
@@ -308,7 +289,7 @@ def _child(samples, dsn, commands=None, env=None):
                 "page_change": None, "loading": False, "saved_tics": None, "t0": 0.0}
 
     def _say(kind, text=""):
-        """A line for the page's loading screen (doomapp.metrics.Metrics.between)."""
+        """A line for the page's loading screen (sqldoom.server.metrics.Metrics.between)."""
         try:
             samples.put_nowait(("between", time.time(), kind, text))
         except Exception:
@@ -418,7 +399,7 @@ def _child(samples, dsn, commands=None, env=None):
         _say("line", f"loading {target}")
 
     def _between_maps_intermission(cur):
-        """From doom_server's housekeeping (mp_reap), about once a second, also
+        """From the game loop's housekeeping (mp_reap), about once a second, also
         during intermissions."""
         raw = getattr(cur, "_cur", cur)
         raw.execute("SELECT state::text, EXTRACT(EPOCH FROM (intermission_until - now())) FROM mp_match LIMIT 1")
@@ -490,7 +471,7 @@ def _child(samples, dsn, commands=None, env=None):
         _between["skip_change"] = True   # the map change below needs no pass of its own
         if loading:
             # The screen stays up at least _LOADING_MIN_S (owner, 2026-11-13: the
-            # passes take ~0.1 s, too short to read). doom_server restarts its
+            # passes take ~0.1 s, too short to read). the game loop restarts its
             # tic clock after the rotation, so waiting here drops no tic; the
             # referee heartbeat keeps beating (claims expire after 3 s).
             done_s = time.perf_counter() - _between["t0"]
@@ -582,10 +563,10 @@ def _child(samples, dsn, commands=None, env=None):
     # in deathmatch" / "single player" (POST /api/match/mode); no choice means
     # single player, a new player joining means deathmatch again. The switch
     # itself is SQL: mp_match.pending, then doom_mp_rotate -> doom_mp_apply_mode
-    # (postgres_compat.sql). Checked once a second, from doom_server's
-    # housekeeping (doom_sql.mp_reap), which also runs during intermissions.
+    # (sql/functions/multiplayer). Checked once a second, from the game loop's
+    # housekeeping (statements.mp_reap), which also runs during intermissions.
     # skill: the match's difficulty (mp_match.skill, from the rules); every
-    # tic gets it instead of doom_server's SKILL, re-read after each rotation.
+    # tic gets it instead of the game loop's SKILL, re-read after each rotation.
     _keep_mode = os.environ.get("DOOM_KEEP_MODE") == "1"
     _mode = {"end_level": False, "last_seated": 0, "guard": False,
              "skill": int(os.environ.get("SKILL", "2"))}
@@ -594,7 +575,7 @@ def _child(samples, dsn, commands=None, env=None):
         raw = getattr(cur, "_cur", cur)
         if not _mode["guard"]:
             # after doom_mp_configure has used the real value for intermission_tics
-            import doom_server as _ds
+            from sqldoom.game import server as _ds
             _ds.INTERMISSION_SECONDS = max(_ds.INTERMISSION_SECONDS, _INTERMISSION_GUARD_S)
             _mode["guard"] = True
         _drain()
@@ -655,7 +636,7 @@ def _child(samples, dsn, commands=None, env=None):
             elif pending == "deathmatch" and seated < 2:
                 decide("solo", 3, "the second player left during the countdown")
 
-    real_reap = doom_sql.mp_reap
+    real_reap = stmts.mp_reap
 
     def mp_reap(cur, *a, **k):
         freed = real_reap(cur, *a, **k)
@@ -674,11 +655,11 @@ def _child(samples, dsn, commands=None, env=None):
             print(f"[referee] mode check skipped: {str(exc).splitlines()[0][:160]}", flush=True)
         return freed
 
-    doom_sql.mp_reap = mp_reap
+    stmts.mp_reap = mp_reap
 
-    # doom_server reads the slots right after doom_mp_rotate: the moment the
+    # The game loop reads the slots right after doom_mp_rotate: the moment the
     # new level's difficulty is known.
-    real_players = doom_sql.mp_players
+    real_players = stmts.mp_players
 
     def mp_players(cur, *a, **k):
         out = real_players(cur, *a, **k)
@@ -698,7 +679,7 @@ def _child(samples, dsn, commands=None, env=None):
             pass
         return out
 
-    doom_sql.mp_players = mp_players
+    stmts.mp_players = mp_players
 
     # --- map change requested from the page (see the module docstring) -----
     def _take_map_request(cur):
@@ -737,7 +718,7 @@ def _child(samples, dsn, commands=None, env=None):
                 else:
                     print(f"[referee] resumed after {time.time() - _pause['since']:.0f} s", flush=True)
             if _pause["on"]:
-                return False             # no tic: the world waits (doom_server keeps its 35 Hz pace)
+                return False             # no tic: the world waits (the game loop keeps its 35 Hz pace)
         t0, ok, ended = time.perf_counter(), False, False
         if len(a) >= 3:                  # (cur, map_id, skill, players): the rules' difficulty
             a = (a[0], a[1], _mode["skill"]) + tuple(a[3:])
@@ -745,7 +726,7 @@ def _child(samples, dsn, commands=None, env=None):
             result = real_tic(*a, **k)
             ok = True
             if not result and a and _take_map_request(a[0]):
-                result = True            # doom_server: level done -> rotate()
+                result = True            # the game loop: level done -> rotate()
             if _mode["end_level"]:       # mode switch: the intermission, then the same map
                 _mode["end_level"] = False
                 result = True
@@ -756,7 +737,7 @@ def _child(samples, dsn, commands=None, env=None):
                 samples.put_nowait((time.time(), (time.perf_counter() - t0) * 1000.0, ok))
             except Exception:
                 pass
-            # The level is over (doom_server rotates next): loading screen
+            # The level is over (the game loop rotates next): loading screen
             # instead of the intermission, outside the tic's timing.
             if ok and ended and a and _BETWEEN:
                 try:
@@ -764,7 +745,7 @@ def _child(samples, dsn, commands=None, env=None):
                 except Exception as exc:
                     print(f"[referee] loading screen skipped: {str(exc).splitlines()[0][:160]}", flush=True)
             # Vacuum between tics, outside the timing window. The cursor is
-            # the first positional arg (doom_sql.mp_tic(cur, ...)); the
+            # the first positional arg (statements.mp_tic(cur, ...)); the
             # connection has autocommit=True so VACUUM runs immediately.
             if ok and a:
                 try:
@@ -772,38 +753,15 @@ def _child(samples, dsn, commands=None, env=None):
                 except Exception:
                     pass
 
-    doom_sql.mp_tic = mp_tic            # doom_server calls it as sql.mp_tic
-
-    # --- frame views: on the branch already (sql_frozen/) --------------------
-    # doom_server asks for each rotation map's frame views when it opens the
-    # match (install_match_frame_views -> install_slot_frame_views). They come
-    # from sql_frozen/ with the template; here they are only checked. (Until
-    # 2026-11-13 they were built here through the CedarScript translator and
-    # cedar2plpgsql's rewrites, ~50 s per start.)
-    import cedarscript_runtime as csr
-
-    def install_slot_frame_views(cur, map_id, slot, player_thing_id, skill):
-        raw = getattr(cur, "_cur", cur)
-        idx = csr.frame_view_name(slot, map_id, True)
-        names = [csr.frame_view_name(slot, map_id, False), idx, f"{idx}_low"]
-        raw.execute("SELECT array_agg(n) FILTER (WHERE to_regclass(n) IS NULL) FROM unnest(%s::text[]) n", (names,))
-        missing = raw.fetchone()[0]
-        if missing:
-            raise RuntimeError(f"frame views missing on this branch: {', '.join(missing)} "
-                               "(apply sql_frozen/ to it: python -m doomapp.frozen apply <endpoint>)")
-        return names
-
-    csr.install_slot_frame_views = install_slot_frame_views
+    stmts.mp_tic = mp_tic               # server calls it as sql.mp_tic
 
     # --- opening the match -------------------------------------------------------
-    # Right before doom_server checks the frame views: the game's mode and rules
-    # from the first tic. (The player API, the game-mode functions and the tic
-    # settings and rewrites were installed here until 2026-11-13; they are all
-    # in sql_frozen/ now.)
-    import doom_server
-    real_match_views = doom_server.install_match_frame_views
+    # Right before the game loop checks the frame views (server.check_frame_views):
+    # the game's mode and rules from the first tic.
+    from sqldoom.game import server
+    real_check_views = server.check_frame_views
 
-    def install_match_frame_views(cur, map_ids, skill):
+    def check_frame_views(cur, map_ids):
         t0 = time.perf_counter()
         try:
             if start_mode in ("solo", "deathmatch"):
@@ -820,16 +778,16 @@ def _child(samples, dsn, commands=None, env=None):
         except Exception as exc:
             print(f"[referee] opening the match failed: {exc}", flush=True)
             raise
-        return real_match_views(cur, map_ids, skill)
+        return real_check_views(cur, map_ids)
 
-    doom_server.install_match_frame_views = install_match_frame_views
+    server.check_frame_views = check_frame_views
     _start_hud_worker(dsn)
-    sys.exit(doom_server.main())
+    sys.exit(server.main())
 
 
 # --- status-bar cache writer ---------------------------------------------------
 # Frames take the status bar from hud_cache when its key matches the live HUD
-# state (cedar2plpgsql.hudcache_view_sql) and draw it themselves otherwise, so
+# state (the doom_hudkey_slot<S>_m<M> views) and draw it themselves otherwise, so
 # this worker is only an accelerator: every DOOM_HUD_INTERVAL_MS (default 100,
 # 0 = off) it checks each seated slot of the current map (key only, ~2.5 ms)
 # and redraws the cached bar (~20 ms) when the key changed. Its own
@@ -972,7 +930,7 @@ class Referee:
             self._stop.wait(min(self.backoff_max_s, 2.0 ** failures))
 
     def stop(self, timeout=10.0):
-        """SIGTERM: doom_server finishes its tic and releases the referee claim."""
+        """SIGTERM: the game loop finishes its tic and releases the referee claim."""
         self._stop.set()
         proc = self._proc
         if proc is not None and proc.is_alive():

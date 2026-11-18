@@ -1,10 +1,7 @@
-// Host page: one game pane (the upstream page, embedded with ?embed=1) plus
-// the backend's metrics. The page drives the embed over postMessage (play,
-// retry) and shows what it reports (status, fps, ms/frame, tic round trip).
-// The stage selector chooses where frames render: stage 1 the primary, stage
-// 2 the read replicas (the game's render pool puts one connection on each,
-// round robin). Input and the game always stay on the primary.
-// mirror.js is no longer loaded.
+// Host page: one game pane (the game page web/game/, embedded with ?embed=1)
+// plus the backend's metrics. The page drives the embed over postMessage
+// (play, retry) and shows what it reports (status, fps, ms/frame, tic round
+// trip). Every game renders its frames on its own Lakebase branch.
 const $ = (id) => document.getElementById(id);
 // Game size follows the window (index.html .pane max-width): the 16:10 game
 // is at most as tall as the window below its top edge, so it never needs a
@@ -19,48 +16,12 @@ function fitPane() {
 window.addEventListener('resize', fitPane);
 window.addEventListener('load', fitPane);
 fitPane();
-// The game this page plays: '' = the shared match, else a game on its own branch (menu, below).
+// The game this page plays: a game on its own branch (menu, below); '' before one starts.
 const GAME = { id: '', mode: '' };
 // Live values (for the sidebar cards and Copy stats) and 60 s of history per metric.
 const live = {};
-const hist = { tic: [], fps: [], db: [], rtt: [], lag: [], wire: [] };
+const hist = { tic: [], fps: [], db: [], rtt: [], wire: [] };
 const game = $('game');
-// Stage = the endpoint the render pool uses; input always goes to the primary.
-// The stage selector ("frames on": primary / replicas / Lakehouse RT) is
-// gone from the page since 2026-11-11: frames render on the game's Lakebase
-// endpoint only. The code stays for a later stage: add buttons back to index.html.
-const STAGES = {};
-let replicas = [];                  // replica1..N from /api/health
-let stage = 'primary';
-const stageLabel = () => (stage === 'primary' ? 'Lakebase Primary'
-  : `Lakebase Read Replicas (${replicas.length})`);
-const sendTarget = () => game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'render_target', target: stage }, '*');
-function markStage() {
-  for (const [id, t] of Object.entries(STAGES)) $(id).classList.toggle('active', t === stage);
-  $('pane-label').textContent = stageLabel();
-  // On replicas, at most one render connection per replica: overlapping
-  // renders on one replica stall its replay (hot standby snapshot conflicts).
-  const cap = stage === 'primary' ? Infinity : replicas.length;
-  for (const b of document.querySelectorAll('#conns button')) {
-    const n = parseInt(b.dataset.n, 10);
-    b.disabled = n > cap;
-    b.title = n > cap ? `Stage 2 uses at most one connection per replica (${replicas.length} configured)` : '';
-  }
-  if (renderConns > cap) {
-    renderConns = Math.max(...CONN_CHOICES.filter((n) => n <= cap));
-    markConns();
-    sendConns();
-  }
-}
-for (const [id, t] of Object.entries(STAGES)) {
-  $(id).addEventListener('click', () => {
-    if ($(id).disabled || stage === t) return;
-    stage = t;
-    sendTarget();
-    markStage();
-    game.focus();
-  });
-}
 let state = 'starting', retry = null;
 
 const fmt = (v, d) => (typeof v === 'number' && isFinite(v) ? v.toFixed(d) : '\u2014');
@@ -220,7 +181,6 @@ window.addEventListener('message', (ev) => {
   switch (m.kind) {
     case 'ready':
       sendConns();
-      sendTarget();
       sendLowDetail();
       if (wantPlay) play();
       else nickEl.focus();
@@ -293,7 +253,7 @@ function showBetween(b, local = false) {
   }
 }
 
-// Backend metrics: the referee's tic cost, and frame cost + lag at the database.
+// Backend metrics: the referee's tic cost, and the frame cost at the database.
 async function pollMetrics() {
   for (;;) {
     try {
@@ -310,43 +270,16 @@ async function pollMetrics() {
       $('m-tic-sub').innerHTML = `p99 <span class="v">${fmt(t.p99_ms, 1)}</span> &middot; max <span class="v">${fmt(t.max_ms, 1)}</span>`
         + ` &middot; <span class="v">${t.over_budget ?? 0}</span> over &middot; <span class="v">${fmt(t.per_s, 0)}</span>/s`;
       push('tic', t.p50_ms); spark('sp-tic', hist.tic, budget);
-      // Stage 2: frame cost averaged over the replicas rendering, lag of the
-      // furthest-behind replica.
-      const names = stage === 'primary' ? ['primary'] : replicas;
-      const named = names.map((n) => [n, m.panes?.[n]]).filter(([, p]) => p);
-      const ps = named.map(([, p]) => p);
-      const p50s = ps.map((p) => p.frame?.p50_ms).filter((v) => typeof v === 'number');
-      const srv = p50s.length ? p50s.reduce((a, b) => a + b, 0) / p50s.length : null;
+      const srv = m.panes?.primary?.frame?.p50_ms ?? null;
       live.srv = srv;
       setBig('m-db', fmt(srv, 0), 'ms');
-      $('m-db-sub').textContent = `p50 on ${stage === 'primary' ? 'the primary' : `${p50s.length || replicas.length} replica${(p50s.length || replicas.length) === 1 ? '' : 's'}`}`;
+      $('m-db-sub').textContent = 'p50 on the game\u2019s branch';
       push('db', srv); spark('sp-db', hist.db);
-      const lags = ps.map((p) => p.lag_tics).filter((v) => typeof v === 'number');
-      const errs = ps.filter((p) => p.lag_error).length;
-      const lag = lags.length ? Math.max(...lags) : null;
-      live.lag = lag; live.lagEach = named.map(([n, p]) => `${n} ${p.lag_tics ?? p.lag_error ?? '?'}`).join(', ');
-      setBig('m-lag', lag == null ? (errs ? 'error' : '\u2014') : String(lag), 'tics', lag > 10 ? 'warn' : '');
-      $('m-lag-sub').textContent = stage === 'primary'
-        ? 'replica lag (frames render on the primary: always fresh)'
-        : `behind the primary, \u2248 ${fmt(lag == null ? null : lag * budget, 0)} ms \u00b7 worst replica`;
-      $('m-lag').title = live.lagEach;
-      push('lag', lag); spark('sp-lag', hist.lag);
     } catch (e) { /* app restarting; try again */ }
     await new Promise((r) => setTimeout(r, betweenShown ? 250 : 1000));   // the log moves fast
   }
 }
 
-// Stage 2 needs LAKEBASE_REPLICA_ENDPOINTS on the app.
-fetch('/api/health').then((r) => r.json()).then((h) => {
-  replicas = (h.panes || []).filter((p) => p.startsWith('replica'));
-  if ($('ro-replicas')) $('ro-replicas').textContent = String(replicas.length);
-  if (replicas.length && $('s2')) {
-    $('s2').disabled = false;
-    $('s2').title = `Render frames on ${replicas.length} read replica${replicas.length === 1 ? '' : 's'}, one connection each; the game itself stays on the primary`;
-  }
-  markStage();
-}).catch(() => {});
-markStage();
 pollMetrics();
 
 // ---------------------------------------------------------------- sidebar
@@ -599,14 +532,12 @@ setInterval(loadRules, 3000);
 $('copy').addEventListener('click', async () => {
   const b = live.bd || {}, t = live.tic || {};
   const ld = live.bd?.lowDetail;
-  const stageName = stage === 'primary' ? 'stage 1 \u00b7 primary' : `stage 2 \u00b7 ${replicas.length} replicas`;
   const ldStr = ld ? ' \u00b7 low detail' : '';
   const text = [
     `SQLDoom on Lakebase \u00b7 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`,
-    `${stageName} \u00b7 ${live.conns ?? '?'} frames in flight${ldStr}`,
+    `${live.conns ?? '?'} frames in flight${ldStr}`,
     `${fmt(live.fps, 1)} fps \u00b7 ${fmt(live.browserMs, 0)} ms/frame (browser) \u00b7 ${fmt(live.srv, 0)} ms/frame (at Lakebase)`,
     `tic p50 ${fmt(t.p50_ms, 1)} \u00b7 p99 ${fmt(t.p99_ms, 1)} \u00b7 max ${fmt(t.max_ms, 1)} ms \u00b7 ${t.over_budget ?? 0} over budget \u00b7 ${fmt(t.per_s, 0)}/s \u00b7 referee ${live.referee ?? '?'}`,
-    `lag ${live.lag ?? '\u2014'} tics (${live.lagEach || '\u2014'})`,
     `frame = db ${fmt(b.db, 0)} + net+proxy ${fmt(b.net, 0)} + transfer ${fmt(b.xfer, 1)} + decode ${fmt(b.decode, 1)} + wait ${fmt(b.wait, 1)} ms`,
     `camera ${fmt(b.camera, 0)} \u00b7 gap ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 conn round trip ${fmt(b.relayRt, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms \u00b7 coalesce ${b.coalesce ? 'on' : 'off'}`,
     `wire ${fmt(live.wireKbps, 0)} KB/s from ${fmt(live.kbps, 0)} KB/s before delta+deflate`,
@@ -816,7 +747,7 @@ function playGame(id, mode, info = null) {
   if (mode === 'solo' && !document.hidden) {
     fetch(`/api/games/${id}/away?on=0&tab=${hostTab()}`, { method: 'POST' }).catch(() => {});
   }
-  startEmbed(`/upstream/?embed=1&game=${id}`, gameLabel(info, mode));
+  startEmbed(`/game/?embed=1&game=${id}`, gameLabel(info, mode));
   showRuns(info);
   clearInterval(keepAlive);
   keepAlive = setInterval(async () => {

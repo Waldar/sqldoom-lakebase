@@ -1,12 +1,9 @@
-#!/usr/bin/env python3
-"""Deathmatch referee
+"""The game loop: opens the match and runs doom_run_mp_tic at the tic rate.
 
-Connects as the database owner, opens a match on MAP_ID with four free slots,
-installs the per-slot frame views, and runs doom_run_mp_tic at 35 Hz.
-
-    DB_DSN="<owner dsn>" MAP_ID=1 SKILL=2 python3 doom_server.py
-    # a player, native:   DB_DSN="user=<role> ..." DOOM_JOIN=1 python3 doom_client.py
-    # a player, browser:  python3 doom_web.py, then open the page it prints
+Connects as the owner of the schema (DB_DSN), opens a match on MAP_ID with
+four free seats, checks the per-seat frame views, and runs the tic at 35 Hz.
+Players join from the browser. sqldoom.game.referee runs main() in a child
+process of the app and adds its own hooks (timing, VACUUM, map changes).
 
 The match runs like a 1990s server. Config parameters set via ENV and their default:
     SKILL 2 (the engine's skill_t, 0 to 4: 0 "I'm too young to die", 1 "Hey,
@@ -26,10 +23,7 @@ import time
 
 import psycopg2
 
-import doom_sql as sql
-from cedarscript_runtime import install_match_frame_views
-import doom_config
-from doom_config import DB_DSN, REPLAN_MS, load_constants, tune_replanning
+from . import statements as sql
 
 
 def log(message):
@@ -70,21 +64,27 @@ def _terminate(*_):
     STOPPING = True
 
 
+def check_frame_views(cur, map_ids):
+    """The per-seat frame views of every map the match can visit. They are
+    created with the database code (doom.create_frame_views(), sql/frame_views);
+    this only checks that they are there."""
+    cur.execute("SELECT array_agg(v ORDER BY v) FROM (SELECT format('api_frame_idx_slot%%s_m%%s', t.type, t.map_id) AS v "
+                "FROM things t WHERE t.map_id = ANY(%s) AND t.type BETWEEN 1 AND 4) s "
+                "WHERE to_regclass(v) IS NULL", (list(map_ids),))
+    missing = cur.fetchone()[0]
+    if missing:
+        raise RuntimeError(f"frame views missing on this branch: {', '.join(missing)} "
+                           "(install the database code: python -m sqldoom.db install <endpoint>)")
+
+
 def main():
     signal.signal(signal.SIGTERM, _terminate)
     signal.signal(signal.SIGINT, _terminate)
-    conn = psycopg2.connect(DB_DSN)
+    conn = psycopg2.connect(os.environ["DB_DSN"])
     conn.autocommit = True
     cur = conn.cursor()
-    if sql.set_session_parallel(cur, os.getenv("DB_PARALLEL", "")):
-        log(f"[server] tic runs with max_parallel_workers={os.getenv('DB_PARALLEL')}")
-    if sql.set_session_async_commit(cur):
-        log("[server] tic commits asynchronously (no fsync per tic)")
-    tune_replanning(cur)
-    load_constants(cur)
-    if REPLAN_MS > 0:
-        log(f"[server] replan interval set to {REPLAN_MS / 1000:.0f} s server-wide (REPLAN_MS)")
-    sql.prepare_client(cur)
+    sql.load_constants(cur)
+    sql.prepare(cur)
     cur.execute("SELECT doom_mp_referee_claim(%s, 3)", (MATCH_KEY,))
     if not cur.fetchone()[0]:
         raise SystemExit("another referee is running the match (heartbeat within 3 s); "
@@ -123,7 +123,7 @@ def main():
             cur.execute("SELECT map_id FROM maps WHERE name = ANY(%s) OR map_id = %s ORDER BY map_id",
                         (rotation, MAP_ID))
             match_maps = [row[0] for row in cur.fetchall()]
-            install_match_frame_views(cur, match_maps, SKILL)
+            check_frame_views(cur, match_maps)
             break
         except psycopg2.errors.SerializationFailure:
             conn.rollback()
@@ -148,8 +148,7 @@ def main():
             conn.rollback()
             time.sleep(0.2)
     cur.execute("SELECT doom_mp_open()")
-    log(f"[server] ready in {time.perf_counter() - started:.1f} s; players join "
-        f"from the browser (doom_web.py) or with DOOM_JOIN=1 python3 doom_client.py")
+    log(f"[server] ready in {time.perf_counter() - started:.1f} s; players join from the browser")
 
     next_tic = time.perf_counter()
     last_report = next_tic
@@ -342,7 +341,7 @@ def main():
                     players = sql.mp_start(cur, MAP_ID, SKILL)
                 except psycopg2.Error:
                     conn.rollback()
-                time.sleep(doom_config.TIC_SECONDS)
+                time.sleep(sql.TIC_SECONDS)
                 continue
             try:
                 level_done = sql.mp_tic(cur, MAP_ID, SKILL, players)
@@ -361,7 +360,7 @@ def main():
             if level_done:
                 rotate()
                 continue
-            next_tic += doom_config.TIC_SECONDS
+            next_tic += sql.TIC_SECONDS
             delay = next_tic - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)
