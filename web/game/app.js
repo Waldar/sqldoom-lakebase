@@ -7,6 +7,17 @@
 import { PgConnection, OID } from './pgwire.js';
 
 const TIC_MS = 1000 / 35;
+// Frames draw the newest committed tic (alpha 1). Interpolating between the
+// last two tics on this page's clock showed the newest state only partly,
+// about half a tic behind, and at 35 frames a second or fewer it buys no
+// smoothness (LBDoom, 2026-11-17). localStorage.doomInterp = '1' goes back.
+const INTERPOLATE = localStorage.getItem('doomInterp') === '1';
+// A key or button change goes out at once instead of on the next 35 Hz
+// input tick (0-28.6 ms later). localStorage.doomInputNow = '0' turns it off.
+const INPUT_NOW = localStorage.getItem('doomInputNow') !== '0';
+const INPUT_CODES = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown',
+  'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Space']);
+let sendInputNow = null;   // set while playing
 const TURN_DEGREES_PER_TIC = 3.2;
 const MOUSE_SENSITIVITY = 0.15;
 const W = 320, H = 200;
@@ -100,11 +111,13 @@ window.addEventListener('keydown', (ev) => {
     if (ev.code === 'Equal' || ev.code === 'NumpadAdd') amPending.push({ name: 'am_zoom', params: [1.25] });
     if (ev.code === 'Minus' || ev.code === 'NumpadSubtract') amPending.push({ name: 'am_zoom', params: [1 / 1.25] });
   }
+  if (INPUT_CODES.has(ev.code) && sendInputNow) sendInputNow();
   if (!['F5', 'F11', 'F12'].includes(ev.code)) ev.preventDefault();
 });
 window.addEventListener('keyup', (ev) => {
   if (ev.code === 'Tab') { ev.preventDefault(); scoreHeld = false; refreshScore(); }
-  keys.delete(ev.code);
+  const had = keys.delete(ev.code);
+  if (had && INPUT_CODES.has(ev.code) && sendInputNow) sendInputNow();
 });
 window.addEventListener('blur', () => keys.clear());
 // The mouse: a click on the screen locks the pointer while playing. Chrome
@@ -129,8 +142,12 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('pointerlockerror', () => {
   if (!lockAsksWithPromise) status('mouse capture failed; click the screen again', true);
 });
-ui.canvas.addEventListener('mousedown', (ev) => { if (ev.button === 0 && document.pointerLockElement === ui.canvas) input.fireHeld = true; });
-window.addEventListener('mouseup', (ev) => { if (ev.button === 0) input.fireHeld = false; });
+ui.canvas.addEventListener('mousedown', (ev) => {
+  if (ev.button === 0 && document.pointerLockElement === ui.canvas) { input.fireHeld = true; if (sendInputNow) sendInputNow(); }
+});
+window.addEventListener('mouseup', (ev) => {
+  if (ev.button === 0 && input.fireHeld) { input.fireHeld = false; if (sendInputNow) sendInputNow(); }
+});
 window.addEventListener('mousemove', (ev) => {
   if (document.pointerLockElement === ui.canvas) input.mouseTurn += ev.movementX * MOUSE_SENSITIVITY;
 });
@@ -143,7 +160,10 @@ ui.canvas.addEventListener('wheel', (ev) => {
 
 const down = (...codes) => codes.some((c) => keys.has(c));
 
-function readCommand(alive) {
+// keyTurn false: no turn from the turn keys. The tic adds up the turns of
+// every input since the last tic, so an input sent between two ticks must
+// not turn by a tick's worth again (the mouse's turn is sent once either way).
+function readCommand(alive, keyTurn = true) {
   const enabled = alive;
   // With the automap up the arrows pan it instead.
   const arrowsPan = automap.on;
@@ -158,7 +178,7 @@ function readCommand(alive) {
   const left = arrowsPan ? down('KeyQ') : down('KeyQ', 'ArrowLeft');
   const fwd = enabled ? (up ? 1 : 0) - (back ? 1 : 0) : 0;
   const strafe = enabled ? (down('KeyD') ? 1 : 0) - (down('KeyA') ? 1 : 0) : 0;
-  const turnKeys = enabled ? (right ? 1 : 0) - (left ? 1 : 0) : 0;
+  const turnKeys = enabled && keyTurn ? (right ? 1 : 0) - (left ? 1 : 0) : 0;
   const turn = enabled ? turnKeys * TURN_DEGREES_PER_TIC + input.mouseTurn : 0;
   input.mouseTurn = 0;
   const run = enabled && down('ShiftLeft', 'ShiftRight');
@@ -572,6 +592,12 @@ async function play(user, password, target, nick, guest) {
       ticInFlight--;
     }
   }, TIC_MS);
+  // A change of keys or buttons: the same input statement now, on the same
+  // connection, so the tic that starts next already has it.
+  sendInputNow = INPUT_NOW ? () => {
+    if (!running || ticInFlight > 2) return;
+    pg.run([{ name: 'input', params: readCommand(stats.alive, false) }]).catch(() => {});
+  } : null;
 
   // ---- the render pool ----------------------------------------------------
   // Frames come from a pool of 1, 2, 4 or 6
@@ -772,7 +798,7 @@ async function play(user, password, target, nick, guest) {
       }
       const mapUp = automap.on;
       const seq = ++seqIssued;
-      const alpha = Math.min(1, Math.max(0, (performance.now() - lastTic) / TIC_MS));
+      const alpha = INTERPOLATE ? Math.min(1, Math.max(0, (performance.now() - lastTic) / TIC_MS)) : 1;
       const t0 = performance.now();
       // Browser-side time between the last answer and this request; the relay
       // reports its idle time over the same span, the difference is the
@@ -970,6 +996,7 @@ async function play(user, password, target, nick, guest) {
 
   const stop = (why, bad) => {
     if (!running) return;
+    sendInputNow = null;
     running = false;
     clearInterval(ticker);
     if (audio) { audio.stopAll(); audio.stopMusic(); }

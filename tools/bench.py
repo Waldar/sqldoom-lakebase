@@ -109,6 +109,7 @@ def main():
         frames.append((time.perf_counter() - t0) * 1e3)
         sizes.add(len(raw) if raw is not None else 0)
     frame_server = [server_ms(cur, frame_sql) for _ in range(10)]
+    camera_server = [server_ms(cur, "SELECT api_camera(1.0)") for _ in range(20)]
     cur.execute("UPDATE mp_players SET role_name = NULL WHERE role_name = %s", (PLAYER,))
     cur.execute("DELETE FROM mp_waiting WHERE role_name = %s", (PLAYER,))
 
@@ -120,6 +121,7 @@ def main():
     line("tic action    server execution", tic_server)
     line("frame         client (camera + frame)", frames)
     line("frame         server execution", frame_server)
+    line("camera        server execution", camera_server)
     print(f"tic budget 28.6 ms: action tics within budget {sum(t <= 28.6 for t in tics['action'])}/{len(tics['action'])}")
     print(f"frame sizes: {sorted(sizes)} bytes (palette byte + 320x200 palette indices); "
           f"frames per second on one connection (client p50) = {1000 / pct(frames, 50):.1f}")
