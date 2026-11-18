@@ -187,7 +187,6 @@ window.addEventListener('message', (ev) => {
       break;
     case 'render_conns':
       live.conns = m.n;
-      live.targets = m.targets || [];
       break;
     case 'score':
       renderScoreCard(m.rows || [], m.match, m.user);
