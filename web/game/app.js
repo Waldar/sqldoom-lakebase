@@ -929,6 +929,17 @@ async function play(user, password, target, nick, guest) {
             ping: bd.pingN ? bd.ping / bd.pingN : bd.pingKeep,
             lowDetail,
             coalesce: !!(renderPool[0] && renderPool[0].coalesce),
+            // the browser's own switches (localStorage, kept per browser):
+            // a leftover A/B setting shows up in Copy stats
+            pipeline: PIPELINE,
+            interpolate: INTERPOLATE,
+            inputNow: INPUT_NOW,
+            changed: [
+              PIPELINE !== 2 && 'doomPipeline',
+              INTERPOLATE && 'doomInterp',
+              !INPUT_NOW && 'doomInputNow',
+              !(renderPool[0] && renderPool[0].coalesce) && 'doomCoalesce',
+            ].filter(Boolean),
             gapP50: pct(bd.gaps, 0.5),
             gapMax: pct(bd.gaps, 1),
             stall: bd.stall,

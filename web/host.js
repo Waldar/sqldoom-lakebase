@@ -538,7 +538,12 @@ $('copy').addEventListener('click', async () => {
     `${fmt(live.fps, 1)} fps \u00b7 ${fmt(live.browserMs, 0)} ms/frame (browser) \u00b7 ${fmt(live.srv, 0)} ms/frame (at Lakebase)`,
     `tic p50 ${fmt(t.p50_ms, 1)} \u00b7 p99 ${fmt(t.p99_ms, 1)} \u00b7 max ${fmt(t.max_ms, 1)} ms \u00b7 ${t.over_budget ?? 0} over budget \u00b7 ${fmt(t.per_s, 0)}/s \u00b7 referee ${live.referee ?? '?'}`,
     `frame = db ${fmt(b.db, 0)} + net+proxy ${fmt(b.net, 0)} + transfer ${fmt(b.xfer, 1)} + decode ${fmt(b.decode, 1)} + wait ${fmt(b.wait, 1)} ms`,
-    `camera ${fmt(b.camera, 0)} \u00b7 gap ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 conn round trip ${fmt(b.relayRt, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms \u00b7 coalesce ${b.coalesce ? 'on' : 'off'}`,
+    `camera ${fmt(b.camera, 0)} \u00b7 gap ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 conn round trip ${fmt(b.relayRt, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms`,
+    b.pipeline == null ? 'browser switches: not reported yet (no frame statistics yet)' :
+    `browser switches: pipeline ${b.pipeline} per connection \u00b7 interpolate ${b.interpolate ? 'on' : 'off'} \u00b7 input at once ${b.inputNow === false ? 'off' : 'on'} \u00b7 coalesce ${b.coalesce ? 'on' : 'off'}`
+      + (b.changed && b.changed.length
+        ? ` \u00b7 CHANGED in this browser: ${b.changed.join(', ')} (localStorage.removeItem('<name>') and reload for the default)`
+        : ' \u00b7 all defaults'),
     `wire ${fmt(live.wireKbps, 0)} KB/s from ${fmt(live.kbps, 0)} KB/s before delta+deflate`,
   ].join('\n');
   const btn = $('copy');
