@@ -4,7 +4,9 @@ CREATE INDEX IF NOT EXISTS idx_node_path_steps_map ON doom.node_path_steps USING
 CREATE INDEX IF NOT EXISTS idx_render_things_map ON doom.render_things USING btree (map_id);
 CREATE INDEX IF NOT EXISTS idx_sector_adjacency ON doom.sector_adjacency USING btree (map_id, sector_id);
 CREATE INDEX IF NOT EXISTS idx_sound_events_map_id ON doom.sound_events USING btree (map_id, event_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sprite_rotations ON doom.sprite_rotations USING btree (sprite, frame, wanted_rotation);
 CREATE INDEX IF NOT EXISTS idx_ui_hud_pixels_name ON doom.ui_hud_pixels USING btree (name);
+CREATE INDEX IF NOT EXISTS idx_ui_hud_runs_pal_name ON doom.ui_hud_runs USING btree (pal, name);
 CREATE INDEX IF NOT EXISTS idx_world_effects_map ON doom.world_effects USING btree (map_id);
 CREATE INDEX IF NOT EXISTS linedef_geom_box_gist ON doom.linedef_geom USING gist (map_id, box(point((x1)::double precision, (y1)::double precision), point((x2)::double precision, (y2)::double precision)));
 CREATE INDEX IF NOT EXISTS linedef_geom_special ON doom.linedef_geom USING btree (map_id, special);

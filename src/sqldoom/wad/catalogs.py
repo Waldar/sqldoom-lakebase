@@ -8,8 +8,10 @@ SEED = SQL_ROOT / "seed"
 # In this order; demo_data.sql is optional (see load_game_data).
 SEED_FILES = ("game_data.sql", "menu_data.sql", "rules.sql")
 # Every materialized view, in dependency order (ui_bar_bytes reads ui_static_pixels).
+# In refresh order: ui_hud_runs reads ui_hud_pixels and colormap_rgb,
+# sprite_rotations sprite_frames.
 MATVIEWS = ("linedef_geom", "sector_adjacency", "node_path_steps", "ui_hud_pixels",
-            "ui_static_pixels", "ui_bar_bytes", "colormap_bytes")
+            "ui_static_pixels", "ui_bar_bytes", "colormap_bytes", "ui_hud_runs", "sprite_rotations")
 
 
 @cache
