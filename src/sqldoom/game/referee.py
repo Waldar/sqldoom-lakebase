@@ -152,14 +152,24 @@ def _child(samples, dsn, commands=None, env=None):
     _REPLAN_AGAIN = 2100                 # tics after the map change (~60 s)
     _replan = []                         # tic numbers at which to re-plan
 
+    def _maint(wall0, label):
+        """A maintenance statement run during play (start, end, what), for the
+        app's slow-frame lines (sqldoom.server.frames), 2026-11-19."""
+        try:
+            samples.put_nowait(("maint", wall0, time.time(), label))
+        except Exception:
+            pass
+
     def _replan_now(cur):
         raw = getattr(cur, "_cur", cur)
         t0 = time.perf_counter()
+        w0 = time.time()
         raw.execute(_TABLES_SQL.format(extra=""), (_MAX_PAGES,))
         names = [t for t, _ in raw.fetchall()]
         if names:
             raw.execute("ANALYZE " + ", ".join(f'doom."{t}"' for t in names))
         raw.execute("DISCARD PLANS")
+        _maint(w0, f"ANALYZE {len(names)} tables")
         print(f"[referee] re-plan for map {_map}: ANALYZE {len(names)} tables + DISCARD PLANS "
               f"in {(time.perf_counter() - t0) * 1000:.0f} ms", flush=True)
 
@@ -204,6 +214,7 @@ def _child(samples, dsn, commands=None, env=None):
             return                       # only retries waiting for their slot
         entry = _queue.pop(ready)
         tbl, full, tries, _ = entry
+        w0 = time.time()
         try:
             cur.execute(f"SET lock_timeout = '{_LOCK_TIMEOUT}'")
             # Plain VACUUM: TRUNCATE false. Its truncate step waits for an
@@ -232,6 +243,7 @@ def _child(samples, dsn, commands=None, env=None):
                 cur.execute("RESET lock_timeout")
             except Exception:
                 pass
+            _maint(w0, f"{'VACUUM FULL' if full else 'VACUUM'} {tbl}")
         if _pass is not None and not _queue:
             cur.execute(_TABLES_SQL.format(extra=""), (_MAX_PAGES,))
             after = sum(int(p) for t, p in cur.fetchall() if t in _pass["names"])
@@ -913,6 +925,9 @@ class Referee:
                     continue
                 if item and item[0] == "between":       # loading screen line (_say)
                     self.metrics.between(*item[1:])
+                    continue
+                if item and item[0] == "maint":         # a VACUUM / ANALYZE during play (_maint)
+                    self.metrics.maintenance(*item[1:])
                     continue
                 wall, ms, ok = item
                 if not running:

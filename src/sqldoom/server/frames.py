@@ -45,6 +45,12 @@ MAX_CONNS = 6
 # picture still follows. DOOM_FRAMES_ON_TIC=0: the plain 35 Hz clock.
 ON_TIC = os.getenv("DOOM_FRAMES_ON_TIC", "1") != "0"
 IDLE_S, IDLE_HZ = 0.2, 5.0
+# Slow frames (2026-11-19, the owner's 8-12 ms spikes): once a second, frames
+# over SLOW_X x this stream's median get one log line, with what ran next to
+# them (tic ms overlapping, the referee's VACUUM / ANALYZE) against the same
+# for normal frames. DOOM_FRAMES_SLOW_LOG=0 turns it off.
+SLOW_LOG = os.getenv("DOOM_FRAMES_SLOW_LOG", "1") != "0"
+SLOW_X = float(os.getenv("DOOM_FRAMES_SLOW_X", "1.2"))
 HEADER = struct.Struct(">IIB")
 F_DELTA, F_NULL = 1, 2
 # A frame's session, as LBDoom's render threads (engine.py SESSION_SETTINGS):
@@ -72,6 +78,9 @@ class FrameStream:
         self.stat = {"slots": 0, "full": 0, "frames": 0, "db": 0.0, "on_tic": 0}
         self.errors = 0
         self.on_tic = ON_TIC and hasattr(metrics, "wait_tic")
+        self.busy = 0                 # render threads inside a frame now
+        self.done = []                # (wall0, wall1, ms, busy at start) for the slow-frame lines
+        self.recent_ms = []           # the last 300 frame times, for the median
         self.sent_bytes = 0           # frame bytes handed to the socket (before its deflate)
 
     # ------------------------------------------------------------- control
@@ -219,9 +228,22 @@ class FrameStream:
                     cur.execute("EXECUTE frames_cam")
                     cam_at = t0
                     t0 = time.perf_counter()
-                cur.execute(f"EXECUTE {name}")
-                row = cur.fetchone()
+                with self.lock:
+                    others = self.busy
+                    self.busy += 1
+                w0 = time.time()
+                try:
+                    cur.execute(f"EXECUTE {name}")
+                    row = cur.fetchone()
+                finally:
+                    with self.lock:
+                        self.busy -= 1
                 ms = (time.perf_counter() - t0) * 1000
+                if SLOW_LOG:
+                    with self.lock:
+                        self.done.append((w0, time.time(), ms, others))
+                        if len(self.done) > 2000:
+                            del self.done[:1000]
                 frame = bytes(row[0]) if row and row[0] is not None else None
                 if frame is not None:
                     self.metrics.frame("primary", ms)
@@ -272,6 +294,8 @@ class FrameStream:
                     self.stat["db"] += ms
             now = time.perf_counter()
             if now - mark >= 1.0:
+                if SLOW_LOG:
+                    self._slow_line()
                 with self.lock:
                     st = dict(self.stat)
                     self.stat = {"slots": 0, "full": 0, "frames": 0, "db": 0.0, "on_tic": 0}
@@ -283,6 +307,44 @@ class FrameStream:
                     "bytes": self.sent_bytes,
                     "conns": self.live_conns()}}))
                 mark = now
+
+
+    def _slow_line(self):
+        """Frames done at least 0.3 s ago (their tics have reported by then):
+        one line if any was over SLOW_X x the median of the last 300."""
+        cutoff = time.time() - 0.3
+        with self.lock:
+            ready = [d for d in self.done if d[1] <= cutoff]
+            self.done = [d for d in self.done if d[1] > cutoff]
+        if not ready:
+            return
+        self.recent_ms = (self.recent_ms + [d[2] for d in ready])[-300:]
+        if len(self.recent_ms) < 30 or not hasattr(self.metrics, "alongside"):
+            return
+        med = sorted(self.recent_ms)[len(self.recent_ms) // 2]
+        slow = [d for d in ready if d[2] > SLOW_X * med]
+        if not slow:
+            return
+        normal = [d for d in ready if d[2] <= SLOW_X * med]
+
+        def side(group):
+            tic, maint = 0.0, {}
+            for w0, w1, _, _ in group:
+                t, m = self.metrics.alongside(w0, w1)
+                tic += t
+                for label in m:
+                    maint[label] = maint.get(label, 0) + 1
+            return tic / len(group), maint
+        s_tic, s_maint = side(slow)
+        n_tic, n_maint = side(normal) if normal else (None, {})
+        worst = max(slow, key=lambda d: d[2])
+        log(f"frames slow {self.player}: {len(slow)}/{len(ready)} over {SLOW_X:g}x median {med:.0f} ms, "
+            f"worst {worst[2]:.0f} ms at {time.strftime('%H:%M:%S', time.gmtime(worst[0]))}.{int(worst[0] % 1 * 1000):03d}; "
+            f"tic overlap {s_tic:.0f} ms (normal frames {'-' if n_tic is None else f'{n_tic:.0f}'} ms); "
+            f"other frames at start {sum(d[3] for d in slow) / len(slow):.1f} "
+            f"(normal {'-' if not normal else f'{sum(d[3] for d in normal) / len(normal):.1f}'}); "
+            f"maintenance alongside: {', '.join(f'{k} x{v}' for k, v in s_maint.items()) or 'none'}"
+            + (f" (normal frames: {', '.join(f'{k} x{v}' for k, v in n_maint.items())})" if n_maint else ""))
 
 
 async def serve(ws, games, game_id):

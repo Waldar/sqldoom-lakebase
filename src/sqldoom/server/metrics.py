@@ -44,6 +44,9 @@ class Metrics:
         # its tic statement returned (autocommit: committed).
         self.tic_count = 0
         self.tic_done = threading.Condition()
+        # The referee's VACUUM / ANALYZE statements during play (start, end,
+        # what), for the frame threads' slow-frame lines (2026-11-19).
+        self.maint = deque(maxlen=2000)
 
     # ----------------------------------------------------------- writers
     def tic(self, wall, ms, ok):
@@ -56,6 +59,27 @@ class Metrics:
             with self.tic_done:
                 self.tic_count += 1
                 self.tic_done.notify_all()
+
+    def maintenance(self, wall0, wall1, label):
+        with self._lock:
+            self.maint.append((wall0, wall1, label))
+
+    def alongside(self, wall0, wall1):
+        """What ran next to [wall0, wall1]: ms of tics overlapping it, and the
+        maintenance statements overlapping it. A tic sample is (end, ms)."""
+        tic_ms, maint = 0.0, []
+        with self._lock:
+            for end, ms in reversed(self.tics):
+                if end < wall0:
+                    break
+                start = end - ms / 1000.0
+                tic_ms += max(0.0, min(end, wall1) - max(start, wall0)) * 1000.0
+            for m0, m1, label in reversed(self.maint):
+                if m1 < wall0 - 60:
+                    break
+                if m0 < wall1 and m1 > wall0:
+                    maint.append(label)
+        return tic_ms, maint
 
     def wait_tic(self, seen, timeout):
         """The tic count once it is past `seen`, or as it is after `timeout` s."""
