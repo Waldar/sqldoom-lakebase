@@ -209,7 +209,24 @@ ldBox.addEventListener('change', () => {
 // solo game); remembered per browser, on by default.
 const musicBox = $('music-box');
 musicBox.checked = localStorage.getItem('sqldoom.music') !== '0';
+// Single player: the scoreboard (one player) gives way to the cheat codes.
+function showModeCards() {
+  const solo = GAME.mode === 'solo';
+  $('score-title').textContent = solo ? 'Single player' : 'Scoreboard';
+  $('score-list').hidden = solo;
+  $('cheat-box').hidden = !solo;
+}
+// Always run (Doom's joyb_speed): on, Shift walks; remembered per browser, on by default.
+const runBox = $('always-run');
+runBox.checked = localStorage.getItem('sqldoom.alwaysRun') !== '0';
+const sendRun = () => game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'always_run', on: runBox.checked }, '*');
+runBox.addEventListener('change', () => {
+  localStorage.setItem('sqldoom.alwaysRun', runBox.checked ? '1' : '0');
+  sendRun();
+  game.focus();
+});
 const sendMusic = () => {
+  showModeCards();
   $('music-label').hidden = GAME.mode !== 'solo';
   game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music', on: musicBox.checked && GAME.mode === 'solo' }, '*');
 };
@@ -252,6 +269,7 @@ window.addEventListener('message', (ev) => {
       sendConns();
       sendLowDetail();
       sendMusic();
+      sendRun();
       if (wantPlay) play();
       else nickEl.focus();
       break;

@@ -26,6 +26,8 @@ let sendCheat = null;      // set while playing
 // The level's music: single player only, the host page's Music box
 // (action 'music'); off, no track is fetched.
 let musicOn = false;
+// Always run (the host page's box, on by default): Shift then walks.
+let alwaysRun = true;
 const TURN_DEGREES_PER_TIC = 3.2;
 const MOUSE_SENSITIVITY = 0.15;
 const W = 320, H = 200;
@@ -190,7 +192,7 @@ function readCommand(alive, keyTurn = true) {
   const turnKeys = enabled && keyTurn ? (right ? 1 : 0) - (left ? 1 : 0) : 0;
   const turn = enabled ? turnKeys * TURN_DEGREES_PER_TIC + input.mouseTurn : 0;
   input.mouseTurn = 0;
-  const run = enabled && down('ShiftLeft', 'ShiftRight');
+  const run = enabled && (alwaysRun !== down('ShiftLeft', 'ShiftRight'));
   // While dead, fire or use is the request to respawn (P_DeathThink); the
   // server decides when. The press just has to reach it.
   const fire = down('ControlLeft', 'ControlRight') || input.fireHeld || (!alive && down('Space'));
@@ -1172,6 +1174,7 @@ async function setup() {
       // loading screen between two maps: no frame requests while it is up
       if (m.action === 'frames_pause' && window.doomPauseFrames) window.doomPauseFrames(!!m.on);
       if (m.action === 'cheats') cheatsOn = !!m.on;
+      if (m.action === 'always_run') alwaysRun = !!m.on;
       if (m.action === 'music') {
         musicOn = !!m.on;
         if (window.doomMusic) window.doomMusic();

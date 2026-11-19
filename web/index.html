@@ -167,6 +167,14 @@
   #score-list .free { color: var(--faint); font-style: italic; text-transform: none; }
   #score-list .state { color: var(--dim); }
   #score-list li.me .who { color: var(--lava2); }
+  /* single player: the cheat codes */
+  #cheat-box summary { cursor: pointer; padding: 10px 0 8px; font: 600 14px var(--mono); color: var(--lava2);
+                       letter-spacing: .04em; }
+  #cheat-box .cheat-hint { color: var(--dim); font-size: 12px; margin: 0 0 6px; }
+  table.cheats { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+  table.cheats td { padding: 3px 0; border-bottom: 1px solid rgba(36,67,76,.6); vertical-align: top; }
+  table.cheats td:first-child { color: var(--text); width: 9.5em; text-transform: uppercase; }
+  table.cheats td:last-child { color: var(--dim); }
   /* rules */
   .rules-who { color: var(--dim); font-size: 12.5px; padding: 7px 0 4px; }
   .rules-who b { color: var(--text); font-weight: 500; }
@@ -238,6 +246,7 @@
   </div>
   <label class="btn ghost" title="Render every other column (160 instead of 320), doubled in the browser. About 33% faster frames, half the bandwidth."><input type="checkbox" id="low-detail"> Low detail</label>
   <label class="btn ghost" id="music-label" hidden title="Doom's music for the level, in single player"><input type="checkbox" id="music-box"> Music</label>
+  <label class="btn ghost" title="Run all the time; hold Shift to walk. Off: Shift runs, as in Doom without always run."><input type="checkbox" id="always-run"> Always run</label>
   <button id="fullscreen" class="btn ghost" title="Fullscreen game">&#9974;&nbsp; Fullscreen</button>
 </div>
 <div id="status"></div>
@@ -282,7 +291,7 @@
     <div id="help">
       Click the game, then:
       <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>&larr;</kbd><kbd>&rarr;</kbd> or mouse turn ·
-      <kbd>Ctrl</kbd> / click fire · <kbd>Shift</kbd> run · <kbd>Space</kbd> use ·
+      <kbd>Ctrl</kbd> / click fire · <kbd>Shift</kbd> walk (run with Always run off) · <kbd>Space</kbd> use ·
       <kbd>1</kbd>&ndash;<kbd>7</kbd> / wheel weapons ·
       <kbd>Tab</kbd> automap · <kbd>Shift</kbd>+<kbd>Tab</kbd> frags
     </div>
@@ -290,7 +299,7 @@
 
   <aside class="side side-play">
     <div class="card">
-      <div class="card-h">Scoreboard
+      <div class="card-h"><span id="score-title">Scoreboard</span>
         <span class="right" title="End this level for everyone: after the intermission the match moves to the chosen map. Seats carry over.">
           <select id="map-pick" class="small-btn"><option value="next">next map</option></select>
           <button class="small-btn" id="map-go">Change map</button>
@@ -304,6 +313,27 @@
           <li><span class="slot">3</span><span class="who free">free</span></li>
           <li><span class="slot">4</span><span class="who free">free</span></li>
         </ol>
+        <!-- single player: instead of the scoreboard, Doom's cheat codes (host.js showModeCards).
+             A list only: they are typed while playing (api_cheat_key). -->
+        <details id="cheat-box" hidden>
+          <summary>I'M A SHAMELESS CHEATER</summary>
+          <p class="cheat-hint">Type a code while playing (not on the automap):</p>
+          <table class="cheats">
+            <tr><td>iddqd</td><td>god mode, on or off</td></tr>
+            <tr><td>idkfa</td><td>all weapons, full ammo, armor and keys</td></tr>
+            <tr><td>idfa</td><td>the same without the keys</td></tr>
+            <tr><td>idclip</td><td>walk through walls (idspispopd too)</td></tr>
+            <tr><td>idchoppers</td><td>a chainsaw</td></tr>
+            <tr><td>idbeholdv</td><td>invulnerability</td></tr>
+            <tr><td>idbeholds</td><td>berserk</td></tr>
+            <tr><td>idbeholdi</td><td>partial invisibility</td></tr>
+            <tr><td>idbeholdr</td><td>radiation suit</td></tr>
+            <tr><td>idbeholda</td><td>the full map</td></tr>
+            <tr><td>idbeholdl</td><td>light amplification</td></tr>
+            <tr><td>idclev<i>em</i></td><td>go to E<i>e</i>M<i>m</i> (idclev13: E1M3)</td></tr>
+            <tr><td>idmypos</td><td>where you are</td></tr>
+          </table>
+        </details>
       </div>
     </div>
 
