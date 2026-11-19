@@ -732,8 +732,16 @@ async function play(user, password, target, nick, guest) {
   // when fewer would do (host.js). Before 2026-11-19 every request paced
   // itself (average round trip / requests in flight), with no common clock.
   const waiting = new Map();          // connection -> lanes ready for a frame
-  let rr = 0, slots = 0, slotsFull = 0;
+  // A slot no lane can take is owed (at most 2) to the first lane that frees
+  // up: a short stall (a slow answer, the network) then delays a frame
+  // instead of losing it. Only a slot past those 2 counts as pool full, so
+  // auto (host.js) grows on a real shortage, not on a stall (2026-11-19: on
+  // 3 connections the owner saw pool full 6% and 31.4 frames/s; simulated
+  // with 10% of answers stalled 150-250 ms on 2 connections: 30.3 -> 33.3
+  // frames/s, pool full 11.8% -> 3.3%).
+  let rr = 0, slots = 0, slotsFull = 0, owed = 0;
   const claimSlot = (r) => new Promise((resolve) => {
+    if (owed > 0 && running && !r.retired) { owed--; resolve(); return; }
     if (!waiting.has(r)) waiting.set(r, []);
     waiting.get(r).push(resolve);
   });
@@ -748,7 +756,7 @@ async function play(user, password, target, nick, guest) {
       const q = waiting.get(pool[(rr + k) % pool.length]);
       if (q && q.length) { rr = (rr + k + 1) % pool.length; q.shift()(); return; }
     }
-    slotsFull++;
+    if (owed < 2) owed++; else slotsFull++;
   };
   let clockAt = performance.now();
   const frameClock = () => {
