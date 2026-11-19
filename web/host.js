@@ -225,9 +225,22 @@ runBox.addEventListener('change', () => {
   sendRun();
   game.focus();
 });
+// Music volume: 0-100 % (default 60), remembered per browser; shown with the Music box.
+const musicVol = $('music-vol');
+const savedVol = parseInt(localStorage.getItem('sqldoom.musicVolume') ?? '60', 10);
+musicVol.value = String(Number.isFinite(savedVol) ? Math.min(100, Math.max(0, savedVol)) : 60);
+const sendMusicVolume = () => game.contentWindow?.postMessage(
+  { source: 'sqldoom-host', action: 'music_volume', v: parseInt(musicVol.value, 10) / 100 }, '*');
+musicVol.addEventListener('input', () => {
+  localStorage.setItem('sqldoom.musicVolume', musicVol.value);
+  sendMusicVolume();
+});
+musicVol.addEventListener('change', () => game.focus());
 const sendMusic = () => {
   showModeCards();
   $('music-label').hidden = GAME.mode !== 'solo';
+  $('music-vol-wrap').hidden = GAME.mode !== 'solo';
+  sendMusicVolume();
   game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music', on: musicBox.checked && GAME.mode === 'solo' }, '*');
 };
 musicBox.addEventListener('change', () => {

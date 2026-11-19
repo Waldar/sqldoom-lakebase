@@ -82,6 +82,9 @@
                 font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.low-detail .pane-label { max-width: min(642px, var(--pane-fit, 642px)); }
   .pane-label b { color: var(--text); font-weight: 500; }
+  #music-vol-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+  #music-vol-wrap[hidden] { display: none; }
+  #music-vol { width: 90px; accent-color: var(--lava2); }
   .pane iframe { width: 100%; aspect-ratio: 16 / 10; display: block; border: 0; }
   /* end of a deathmatch: stay or go solo (host.js, game modes) */
   #dm-choice { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 3;
@@ -248,6 +251,7 @@
   </div>
   <label class="btn ghost" title="Render every other column (160 instead of 320), doubled in the browser. About 33% faster frames, half the bandwidth."><input type="checkbox" id="low-detail"> Low detail</label>
   <label class="btn ghost" id="music-label" hidden title="Doom's music for the level, in single player"><input type="checkbox" id="music-box"> Music</label>
+  <span class="btn ghost" id="music-vol-wrap" hidden title="Music volume">&#9835; <input type="range" id="music-vol" min="0" max="100" step="5" value="60" aria-label="Music volume"></span>
   <label class="btn ghost" title="Run all the time; hold Shift to walk. Off: Shift runs, as in Doom without always run."><input type="checkbox" id="always-run"> Always run</label>
   <button id="fullscreen" class="btn ghost" title="Fullscreen game">&#9974;&nbsp; Fullscreen</button>
 </div>

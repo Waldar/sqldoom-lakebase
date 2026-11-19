@@ -26,6 +26,11 @@ let sendCheat = null;      // set while playing
 // The level's music: single player only, the host page's Music box
 // (action 'music'); off, no track is fetched.
 let musicOn = false;
+// The music's volume, 0..1 from the host page's slider (default 0.6): gain
+// 2.5 x that (1.5 by default; it was a fixed 0.35, barely audible, owner
+// 2026-11-19), through a compressor so the loud tracks (peaks 0.9) do not clip.
+let musicVolume = 0.6;
+const MUSIC_GAIN_MAX = 2.5;
 // Always run (the host page's box, on by default): Shift then walks.
 let alwaysRun = true;
 const TURN_DEGREES_PER_TIC = 3.2;
@@ -266,10 +271,16 @@ class Audio {
     const src = this.ctx.createBufferSource();
     src.buffer = buffer; src.loop = true;
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.35;
-    src.connect(gain); gain.connect(this.ctx.destination);
+    gain.gain.value = MUSIC_GAIN_MAX * musicVolume;
+    const comp = this.ctx.createDynamicsCompressor();
+    comp.threshold.value = -6; comp.knee.value = 6; comp.ratio.value = 12;
+    comp.attack.value = 0.003; comp.release.value = 0.25;
+    src.connect(gain); gain.connect(comp); comp.connect(this.ctx.destination);
     src.start();
     this.music = { src, gain };
+  }
+  setMusicVolume(v) {
+    if (this.music) this.music.gain.gain.setTargetAtTime(MUSIC_GAIN_MAX * v, this.ctx.currentTime, 0.05);
   }
   stopMusic() {
     if (this.music) { try { this.music.src.stop(); } catch (e) { /* already ended */ } this.music = null; }
@@ -536,6 +547,7 @@ async function play(user, password, target, nick, guest) {
     } catch (e) { console.warn('music unavailable', e); }
   };
   window.doomMusic = () => { if (running) loadMusic(); };
+  window.doomMusicVolume = (v) => { if (audio) audio.setMusicVolume(v); };
   readMatch((await pg.run([{ name: 'match' }]))[0].rows[0]);
   await prepareFrame();
   ui.overlay.hidden = true;
@@ -1188,6 +1200,10 @@ async function setup() {
       if (m.action === 'music') {
         musicOn = !!m.on;
         if (window.doomMusic) window.doomMusic();
+      }
+      if (m.action === 'music_volume') {
+        const v = Number(m.v);
+        if (v >= 0 && v <= 1) { musicVolume = v; if (window.doomMusicVolume) window.doomMusicVolume(v); }
       }
       // page-level handler: play()'s variables are reached through doomSetLowDetail
       if (m.action === 'low_detail') {
