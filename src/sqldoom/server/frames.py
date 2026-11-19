@@ -186,8 +186,11 @@ class FrameStream:
         # The frame views read the camera from player_state (the newest tic),
         # so no api_camera write per frame; it still runs about once a second
         # (per thread), for the seat's last_seen, which the seat reaper reads.
+        # A game created before that keeps its views, which read mp_players'
+        # pose: for those, api_camera before every frame as before.
         conn = cur = None
         prepared = {}
+        reads_state = {}
         cam_at = 0.0
         while not (self.stop.is_set() or retire.is_set()):
             try:
@@ -207,8 +210,12 @@ class FrameStream:
                     name = f"frames_{len(prepared)}"
                     cur.execute(f"PREPARE {name} AS SELECT frame_rgb FROM {view}")
                     prepared[view] = name
+                    # the old views read mp_players.pose_x (pg_get_viewdef
+                    # reformats a view's text, so look for the column)
+                    cur.execute("SELECT pg_get_viewdef(%s::regclass) !~ 'pose_x'", (f"doom.{view}",))
+                    reads_state[view] = bool(cur.fetchone()[0])
                 t0 = time.perf_counter()
-                if t0 - cam_at >= 1.0:
+                if not reads_state.get(view) or t0 - cam_at >= 1.0:
                     cur.execute("EXECUTE frames_cam")
                     cam_at = t0
                     t0 = time.perf_counter()
