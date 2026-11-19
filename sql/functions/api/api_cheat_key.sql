@@ -17,7 +17,10 @@ BEGIN
 -- Returns doom_cheat_key's answer: 'none', 'msg:<text>' (the cheat was
 -- applied; the text is also put on the player's message line, which the
 -- frames draw, as Doom prints it), 'warp:E<e>M<m>' (idclev: the page asks
--- the app for that map), 'music:E<e>M<m>' (idmus) or 'iddt'.
+-- the app for that map), 'music:E<e>M<m>' (idmus: "Music Change" on the
+-- message line, the page plays that map's track, api_music_track; a map not
+-- in this WAD: "IMPOSSIBLE SELECTION" and 'none') or 'iddt' (the automap's
+-- cheat level, am_map.c's cheating: 1 every line, 2 the things too, 0 off).
 m := NULL; p := NULL;
 FOR _r1 IN SELECT mp.map_id AS m, mp.player_thing_id AS p
 FROM mp_players mp JOIN mp_match mm ON mm.map_id = mp.map_id
@@ -27,10 +30,25 @@ IF _cs.m IS NULL OR COALESCE(api_cheat_key.p_key, '') !~ '^[A-Za-z0-9]$' THEN
   RETURN 'none';
 END IF;
 result := doom_cheat_key(_cs.m, _cs.p, api_cheat_key.p_key);
+IF _cs.result = 'iddt' THEN
+  PERFORM doom_automap_toggle(_cs.m, _cs.p, 'cheat');
+ELSIF _cs.result LIKE 'music:%' THEN
+  -- st_stuff.c: STSTR_MUS, or STSTR_NOMUS for a map the WAD does not have
+  IF EXISTS (SELECT 1 FROM maps mx JOIN map_music mm ON mm.map_id = mx.map_id
+             WHERE mx.name = SUBSTRING(_cs.result FROM 7)) THEN
+    result := _cs.result;
+    UPDATE player_state SET message = 'Music Change',
+           message_tics = COALESCE((SELECT c.value::int FROM doom_constants c WHERE c.name = 'MESSAGE_TICS'), 140)
+    WHERE map_id = _cs.m AND player_thing_id = _cs.p;
+  ELSE
+    result := 'msg:IMPOSSIBLE SELECTION';
+  END IF;
+END IF;
 IF _cs.result LIKE 'msg:_%' THEN
   UPDATE player_state SET message = SUBSTRING(_cs.result FROM 5),
          message_tics = COALESCE((SELECT c.value::int FROM doom_constants c WHERE c.name = 'MESSAGE_TICS'), 140)
   WHERE map_id = _cs.m AND player_thing_id = _cs.p;
+  IF _cs.result = 'msg:IMPOSSIBLE SELECTION' THEN result := 'none'; END IF;
 END IF;
 RETURN _cs.result;
 END _cs;

@@ -112,7 +112,8 @@ window.addEventListener('keydown', (ev) => {
   }
   if (ev.repeat) { ev.preventDefault(); return; }
   keys.add(ev.code);
-  if (cheatsOn && sendCheat && !automap.on && /^(Key[A-Z]|Digit[0-9])$/.test(ev.code)) sendCheat(ev.code.slice(-1));
+  // on the automap too: Doom reads iddt there (AM_Responder)
+  if (cheatsOn && sendCheat && /^(Key[A-Z]|Digit[0-9])$/.test(ev.code)) sendCheat(ev.code.slice(-1));
   if (ev.code === 'Space') input.pendingUse = true;
   if (/^Digit[1-7]$/.test(ev.code)) input.weaponKey = parseInt(ev.code[5], 10);
   if (automap.on) {
@@ -335,6 +336,7 @@ async function play(user, password, target, nick, guest) {
   await pg.prepare('music', 'SELECT name, audio_data, audio_format FROM api_stage_music');
   await pg.prepare('weapon_slot', 'SELECT api_weapon_slot($1)', [OID.int4]);
   await pg.prepare('cheat', 'SELECT api_cheat_key($1)', [OID.text]);
+  await pg.prepare('music_track', 'SELECT name, audio_data, audio_format FROM api_music_track($1)', [OID.text]);
   await pg.prepare('weapon_cycle', 'SELECT api_weapon_cycle($1)', [OID.int4]);
   await pg.prepare('map_geo', 'SELECT x1, y1, x2, y2, solid FROM api_map_geometry');
   await pg.prepare('live', 'SELECT kind, name, x, y, angle, alive FROM api_things_live WHERE map_id = $1', [OID.int4]);
@@ -617,6 +619,14 @@ async function play(user, password, target, nick, guest) {
   sendCheat = (ch) => pg.run([{ name: 'cheat', params: [ch] }]).then(([r]) => {
     const answer = r.rows[0] && r.rows[0][0];
     if (answer && answer.startsWith('warp:')) post('warp', { map: answer.slice(5) });
+    // idmus: that map's track until the next map change (loadMusic then
+    // plays the level's own), only while the Music box is on
+    if (answer && answer.startsWith('music:') && musicOn && audio) {
+      return pg.run([{ name: 'music_track', binary: true, params: [answer.slice(6)] }]).then(([t]) => {
+        const row = t.rows[0];
+        if (row && musicOn) return audio.setMusic(new TextDecoder().decode(row[0]), row[1]);
+      });
+    }
   }).catch(() => {});
 
   // ---- the render pool ----------------------------------------------------
