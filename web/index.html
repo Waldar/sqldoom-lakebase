@@ -77,8 +77,10 @@
   #help { max-width: min(962px, var(--pane-fit, 962px)); margin: 0 auto; }
   body.low-detail #help { max-width: min(642px, var(--pane-fit, 642px)); }
   .pane.live { border-color: var(--lava); box-shadow: 0 0 0 1px rgba(255,54,33,.25), 0 10px 40px rgba(0,0,0,.45); }
-  .pane-label { position: absolute; top: 8px; left: 10px; z-index: 2; background: rgba(11,32,38,.8);
-                color: var(--dim); padding: 3px 9px; font-size: 12px; border-radius: 3px; pointer-events: none; }
+  /* above the game, not over it: it hid the top-left of the view (owner, 2026-11-19) */
+  .pane-label { max-width: min(962px, var(--pane-fit, 962px)); margin: 0 auto 5px; color: var(--dim);
+                font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.low-detail .pane-label { max-width: min(642px, var(--pane-fit, 642px)); }
   .pane-label b { color: var(--text); font-weight: 500; }
   .pane iframe { width: 100%; aspect-ratio: 16 / 10; display: block; border: 0; }
   /* end of a deathmatch: stay or go solo (host.js, game modes) */
@@ -254,8 +256,8 @@
 <main class="layout">
   <section>
     <!-- the game (web/game/, embedded) -->
+    <div class="pane-label">frames from <b id="pane-label">Lakebase Primary</b></div>
     <div class="pane" id="pane">
-      <div class="pane-label">frames from <b id="pane-label">Lakebase Primary</b></div>
       <iframe id="game" allow="autoplay; fullscreen"></iframe>
       <div class="doom-screen" id="menu">
         <div class="doom-title">SQLDOOM</div>
