@@ -93,7 +93,7 @@ $('map-go').addEventListener('click', () => changeMap($('map-pick').value));
 // the share of slots no connection could take ("pool full"). autoNext():
 //  1. the tic first, unchanged: a really slow game gives a connection back;
 //  2. pool full on > 5% of slots (the connections really are short): one
-//     more, up to needed + 1, where needed = ceil(35 x frame ms at the
+//     more (on > 15%: straight to needed, since 2026-11-19), up to needed + 1, where needed = ceil(35 x frame ms at the
 //     database / 1000 x 1.15) (a connection delivers 1000 / frame ms
 //     frames/s, its two requests queued). Not on a low frame rate alone:
 //     with every slot taken by a connection, the shortfall is elsewhere
@@ -126,7 +126,8 @@ function autoNext(n, t, fps, dbMs, poolFull, now, mem) {
   if (mem.grewAt != null && now - mem.grewAt >= 6000) {
     const helped = typeof fps === 'number' && fps >= Math.min(FPS_TARGET - 1, mem.fpsBefore + 1);
     mem.grewAt = null;
-    if (!helped && n > AUTO_MIN) { mem.ceil = n - 1; mem.ceilUntil = now + 60000; mem.okSince = null; return n - 1; }
+    const from = mem.grewFrom ?? n - 1;
+    if (!helped && n > AUTO_MIN && from < n) { mem.ceil = from; mem.ceilUntil = now + 60000; mem.okSince = null; return Math.max(AUTO_MIN, from); }
   }
   const ceil = now < (mem.ceilUntil ?? 0) ? mem.ceil : AUTO_MAX;
   const cap = Math.min(AUTO_MAX, ceil, Math.max(2, need + 1));
@@ -134,8 +135,11 @@ function autoNext(n, t, fps, dbMs, poolFull, now, mem) {
   if (short && n < cap && mem.grewAt == null) {
     if (now - (mem.shrunkAt ?? -1e9) < 8000) mem.floorUntil = now + 60000, mem.floor = n + 1;
     mem.okSince = null;
-    mem.grewAt = now; mem.fpsBefore = typeof fps === 'number' ? fps : 0;
-    return n + 1;
+    mem.grewAt = now; mem.fpsBefore = typeof fps === 'number' ? fps : 0; mem.grewFrom = n;
+    // clearly short (pool full > 15%): straight to the count needed at the
+    // frame time measured now, not one at a time (2026-11-19: 2 -> 4 took
+    // 10-12 s of short frames); a little short: one more
+    return (poolFull ?? 0) > 0.15 ? Math.min(cap, Math.max(n + 1, need)) : n + 1;
   }
   const floor = now < (mem.floorUntil ?? 0) ? mem.floor : AUTO_MIN;
   const idle = (typeof fps === 'number' && fps >= FPS_TARGET - 1) || (poolFull != null && poolFull <= 0.01);
