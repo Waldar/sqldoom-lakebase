@@ -41,7 +41,9 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
                 END AS distance,
                 CASE
                     WHEN (l.source_x IS NULL) THEN (0.0)::double precision
-                    ELSE sin((atan2((l.source_y - p.py), (l.source_x - p.px)) - p.angle))
+                    -- minus: left is pan -1 for the page's StereoPannerNode (see
+                    -- api_sound_events)
+                    ELSE (- sin((atan2((l.source_y - p.py), (l.source_x - p.px)) - p.angle)))
                 END AS pan
            FROM (loops l
              CROSS JOIN listener p)

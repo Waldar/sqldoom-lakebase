@@ -18,7 +18,11 @@ CREATE OR REPLACE VIEW doom.api_sound_events AS
                 END AS distance,
                 CASE
                     WHEN (e.source_x IS NULL) THEN (0.0)::double precision
-                    ELSE sin((atan2((e.source_y - l.py), (e.source_x - l.px)) - l.angle))
+                    -- minus: a source to the left (Doom's angles turn counter-clockwise,
+                    -- so +90 degrees from the view) is pan -1 for the page's
+                    -- StereoPannerNode (-1 left, +1 right). Without it left and right
+                    -- were swapped (owner, 2026-11-19; LBDoom's sound_events.sql has the same sign).
+                    ELSE (- sin((atan2((e.source_y - l.py), (e.source_x - l.px)) - l.angle)))
                 END AS pan
            FROM (sound_events e
              CROSS JOIN listener l)
