@@ -2,7 +2,24 @@
 
 State when this was written: `main` at `164e97f`, live on `sqldoom-ltap`. Full-detail frames from LBDoom's 2026-11-17 renderer (~45 ms at the database, 24 CU), 35 frames/s on 2 connections in the owner's browser once `localStorage.doomPipeline` was cleared. Ilia's code: Git folder `/Users/fabien.contaminard@databricks.com/LBDoom-latest` (his `main` `2bb97bd`; clone with the `github-databricks` credential, his GitHub has an IP allow list).
 
-Order: 1 and 2 are small and independent; 3 is the big one; 4 can come before or after 3 (the frame views do not change with 3).
+Order: 0 first (small, and its rule carries over to 3); 1 and 2 are small and independent; 3 is the big one; 4 can come before or after 3 (the frame views do not change with 3).
+
+## 0. Frames in flight: the fewest connections that keep 35 frames/s (small)
+
+Today (`web/host.js`, "auto"): every 2 s it looks at the tic only: 34+ tics/s with a p75 under 27 ms adds a frame connection, up to 6; under 32 tics/s or a p75 over 32 ms takes one away, down to 2. It never looks at the frame rate, so it climbs to 6 even when 2 already give 35 frames/s (2026-11-18: 34.9 frames/s on 2 connections, ~45 ms a frame at the database). And each request paces itself (`pace()` in `web/game/app.js`: one every max(28.6 ms, average round trip / requests in flight)), not a common clock.
+
+Goal (owner's call): aim at 35 frames/s, with the number of connections that rate needs, frames handed out in turn; the tic keeps priority.
+
+* **One 35 Hz clock, round robin:** every 28.6 ms the page sends the next frame request (camera + frame) to the next connection in turn that has fewer than 2 requests outstanding (the pipeline depth). If every connection is full, that slot is skipped and counted ("pool full"). Replaces the per-request `pace()`; sequence numbers and dropping a frame older than one already drawn stay.
+* **Connections needed:** with 2 requests queued, a connection delivers up to 1000 / (frame time at the database) frames/s, so needed = ceil(35 x frame ms / 1000 x 1.15). That is 2 at ~45 ms (full detail now), 4 at ~90 ms (low detail before step 4). The page already knows the database time of each frame (the relay's `frame_ms`).
+* **Controller, every 2 s** (in `host.js`, which already polls the tic):
+  * tic slow (p75 > 27 ms or under 34 tics/s): one connection fewer, down to 1, even if frames/s drop: the game first;
+  * else frames/s under 33.5, or "pool full" more than 5% of slots: one more, up to min(needed + 1, 6);
+  * else 35 frames/s and more connections than needed for 10 s: one fewer (hysteresis, so it does not oscillate).
+* **Stats:** Copy stats and the side panel show the connections needed, "pool full" %, and frames/s against the 35 target.
+* **Size:** ~150 lines in `web/game/app.js` (clock, round robin, "pool full") and `web/host.js` (controller, stats). The manual choices (1, 2, 4, 6) stay.
+* **Tests:** in the browser: E1M1 full detail settles on 2 at 35 frames/s; low detail (still ~90-105 ms until step 4) on 4; a big fight on E1M9 that slows the tic takes connections away; switching full/low detail re-settles within 10 s; the frame rate no worse than with today's auto at every point. Copy stats before/after.
+* **With step 3** the same rule moves server-side: renders in flight per seat, started on each tic (LBDoom's `_pace_renderers` only watches the tic; ours adds the 35 frames/s target).
 
 ## 1. Cheat codes, single player only (small)
 
