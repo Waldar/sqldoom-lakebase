@@ -42,11 +42,20 @@ WITH RECURSIVE render_context AS NOT MATERIALIZED (
                                ps.view_angle::float8 - ps.previous_view_angle::float8 + 180.0 AS d) w
     CROSS JOIN LATERAL (SELECT (w.d - 360.0 * FLOOR(w.d / 360.0)) - 180.0 AS turn) t
     WHERE mp.map_id = {map_id} AND mp.slot = {slot} AND mp.role_name = doom_caller()
+), me_state AS MATERIALIZED (
+    -- The viewer's player_state row, read once (since 2026-11-19), for the
+    -- clock, the weapon sprite and the status bar below. Read where it was
+    -- used, its plan followed player_state's statistics: the referee's
+    -- ANALYZE at a map change made a Nightmare E1M9 frame 55 -> 61 ms (bitmap
+    -- scans on it, a nested loop in plane_span_info). MATERIALIZED and LIMIT
+    -- 1: one row whatever the statistics say.
+    SELECT ps.* FROM player_state ps
+    WHERE ps.map_id = {map_id} AND ps.player_thing_id = {thing_id}
+    LIMIT 1
 ), frame_clock AS (
     -- The gameplay clock, for the effects below that are pure functions of it.
     SELECT COALESCE(MAX(ps.level_tics), 0)::bigint AS t
-    FROM player_state ps CROSS JOIN render_context rc
-    WHERE ps.map_id = rc.map_id AND ps.player_thing_id = rc.player_thing_id
+    FROM me_state ps
 ), animated_light AS (
     -- Doom hangs a light thinker off every animated sector. Here the effect is
     -- a pure function of the tic count and the two endpoints resolved at level
@@ -203,7 +212,7 @@ WITH RECURSIVE render_context AS NOT MATERIALIZED (
     FROM render_context rc
     LEFT JOIN player_weapons w ON w.map_id = rc.map_id
       AND w.player_thing_id = rc.player_thing_id
-    LEFT JOIN player_state ps2 ON ps2.map_id = rc.map_id
+    LEFT JOIN me_state ps2 ON ps2.map_id = rc.map_id
       AND ps2.player_thing_id = rc.player_thing_id
     JOIN weapon_defs wd ON wd.weapon_id = COALESCE(w.current_weapon, 2)
     LEFT JOIN weapon_frames rf ON rf.weapon_id = wd.weapon_id
@@ -2079,7 +2088,7 @@ player_ui_state AS (
          ps.damage_count, ps.bonus_count, ps.radsuit_tics,
          ps.message, ps.message_tics, ps.backpack,
          wd.ammo_type AS current_ammo_type
-  FROM player_state ps
+  FROM me_state ps
   CROSS JOIN render_context rc
   LEFT JOIN player_weapons w ON w.map_id = ps.map_id
     AND w.player_thing_id = ps.player_thing_id
