@@ -18,6 +18,11 @@ const INPUT_NOW = localStorage.getItem('doomInputNow') !== '0';
 const INPUT_CODES = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown',
   'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Space']);
 let sendInputNow = null;   // set while playing
+// Doom's cheat codes, typed while playing, single player only: the host page
+// turns them on (action 'cheats'); each letter or digit goes to
+// api_cheat_key, which also checks the match is solo.
+let cheatsOn = false;
+let sendCheat = null;      // set while playing
 const TURN_DEGREES_PER_TIC = 3.2;
 const MOUSE_SENSITIVITY = 0.15;
 const W = 320, H = 200;
@@ -102,6 +107,7 @@ window.addEventListener('keydown', (ev) => {
   }
   if (ev.repeat) { ev.preventDefault(); return; }
   keys.add(ev.code);
+  if (cheatsOn && sendCheat && !automap.on && /^(Key[A-Z]|Digit[0-9])$/.test(ev.code)) sendCheat(ev.code.slice(-1));
   if (ev.code === 'Space') input.pendingUse = true;
   if (/^Digit[1-7]$/.test(ev.code)) input.weaponKey = parseInt(ev.code[5], 10);
   if (automap.on) {
@@ -323,6 +329,7 @@ async function play(user, password, target, nick, guest) {
   await pg.prepare('loops', 'SELECT loop_key, sound_name, volume, pan FROM api_sound_loops');
   await pg.prepare('music', 'SELECT name, audio_data, audio_format FROM api_stage_music');
   await pg.prepare('weapon_slot', 'SELECT api_weapon_slot($1)', [OID.int4]);
+  await pg.prepare('cheat', 'SELECT api_cheat_key($1)', [OID.text]);
   await pg.prepare('weapon_cycle', 'SELECT api_weapon_cycle($1)', [OID.int4]);
   await pg.prepare('map_geo', 'SELECT x1, y1, x2, y2, solid FROM api_map_geometry');
   await pg.prepare('live', 'SELECT kind, name, x, y, angle, alive FROM api_things_live WHERE map_id = $1', [OID.int4]);
@@ -598,6 +605,12 @@ async function play(user, password, target, nick, guest) {
     if (!running || ticInFlight > 2) return;
     pg.run([{ name: 'input', params: readCommand(stats.alive, false) }]).catch(() => {});
   } : null;
+  // A cheat's message shows on the frame's message line (api_cheat_key puts
+  // it there); idclev asks the host page for the map change.
+  sendCheat = (ch) => pg.run([{ name: 'cheat', params: [ch] }]).then(([r]) => {
+    const answer = r.rows[0] && r.rows[0][0];
+    if (answer && answer.startsWith('warp:')) post('warp', { map: answer.slice(5) });
+  }).catch(() => {});
 
   // ---- the render pool ----------------------------------------------------
   // Frames come from a pool of 1, 2, 4 or 6
@@ -1038,6 +1051,7 @@ async function play(user, password, target, nick, guest) {
   const stop = (why, bad) => {
     if (!running) return;
     sendInputNow = null;
+    sendCheat = null;
     running = false;
     clearInterval(ticker);
     if (audio) { audio.stopAll(); audio.stopMusic(); }
@@ -1144,6 +1158,7 @@ async function setup() {
       }
       // loading screen between two maps: no frame requests while it is up
       if (m.action === 'frames_pause' && window.doomPauseFrames) window.doomPauseFrames(!!m.on);
+      if (m.action === 'cheats') cheatsOn = !!m.on;
       // page-level handler: play()'s variables are reached through doomSetLowDetail
       if (m.action === 'low_detail') {
         lowDetail = !!m.on;

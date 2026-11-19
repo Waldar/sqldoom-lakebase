@@ -105,6 +105,7 @@ ALLOWED_SQL = frozenset({
     "SELECT name, audio_data, audio_format FROM api_stage_music",
     "SELECT api_weapon_slot($1)",
     "SELECT api_weapon_cycle($1)",
+    "SELECT api_cheat_key($1)",       # single player only (the function checks)
     "SELECT x1, y1, x2, y2, solid FROM api_map_geometry",
     "SELECT kind, name, x, y, angle, alive FROM api_things_live WHERE map_id = $1",
 })

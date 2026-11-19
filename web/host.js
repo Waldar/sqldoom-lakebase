@@ -46,8 +46,8 @@ nickEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { saveNick();
 fetch('/api/maps').then((r) => r.json()).then(({ maps }) => {
   for (const name of maps || []) $('map-pick').add(new Option(name, name));
 }).catch(() => {});
-$('map-go').addEventListener('click', async () => {
-  const name = $('map-pick').value;
+// Also idclev in single player: the game page posts 'warp' with the map.
+async function changeMap(name) {
   const btn = $('map-go');
   btn.disabled = true;
   try {
@@ -63,7 +63,8 @@ $('map-go').addEventListener('click', async () => {
     setTimeout(() => { btn.disabled = false; }, 3000);
     game.focus();
   }
-});
+}
+$('map-go').addEventListener('click', () => changeMap($('map-pick').value));
 
 // Render connections: 1, 2, 4 or 6 parallel frame connections (the game's
 // render pool), 4 by default. 6 is the most a 32 CU primary takes next to
@@ -232,6 +233,8 @@ window.addEventListener('message', (ev) => {
     case 'state':
       state = m.state;
       $('pane').classList.toggle('live', state === 'playing');
+      // cheat codes: single player only (api_cheat_key refuses otherwise too)
+      game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'cheats', on: state === 'playing' && GAME.mode === 'solo' }, '*');
             if (state === 'playing') {
         live.slot = m.slot;
         // Guests all log in as the app's identity; the name is what others see.
@@ -249,6 +252,9 @@ window.addEventListener('message', (ev) => {
       break;
     case 'stats':
       onStats(m);
+      break;
+    case 'warp':                     // idclev, single player only
+      if (GAME.mode === 'solo' && /^E\dM\d$/.test(m.map || '')) changeMap(m.map);
       break;
   }
 });
