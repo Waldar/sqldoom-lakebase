@@ -691,6 +691,13 @@ async function play(user, password, target, nick, guest) {
   let checking = false;
   const liveRenders = () => renderPool.filter((r) => !r.retired);
   const PIPELINE = localStorage.getItem('doomPipeline') === '0' ? 1 : 2;
+  // Frames rendered in the app and pushed (/frames, sqldoom/server/frames.py),
+  // since 2026-11-19; localStorage.doomServerFrames = '0': the page's own
+  // render connections, as before (A/B; shown in Copy stats).
+  const SERVER_FRAMES = localStorage.getItem('doomServerFrames') !== '0';
+  let sf = null;              // the server frame stream, on the first render connection
+  let wantConns = 1;          // connections asked for (auto or the buttons)
+  const sfOn = () => !!(sf && sf.open && !sf.failed);
   const liveLanes = () => liveRenders().reduce((n, r) => n + r.depth, 0);
 
   // ---- frame time breakdown: where a frame's browser time goes ------------
@@ -837,7 +844,93 @@ async function play(user, password, target, nick, guest) {
     await r.pg.prepare('am_zoom', 'SELECT api_automap_zoom($1)', [OID.float8]);
     await r.pg.prepare('am_toggle', 'SELECT api_automap_toggle($1)', [OID.text]);
     await r.pg.prepare('am_fit', 'SELECT api_automap_fit()', []);
+    if (SERVER_FRAMES && !sf) attachServerFrames(r);
     return r;
+  };
+
+  // ---- frames pushed by the app -------------------------------------------
+  // The first render connection stands in for the stream: its run() answers
+  // the camera at once (the app runs it) and a frame with the next frame
+  // pushed; everything else (the automap) goes to the real connection. So the
+  // clock, drawing, stale drop and stats below are the same either way.
+  const attachServerFrames = (r) => {
+    const s = { open: false, failed: false, latest: null, waiters: [], prev: new Map(), stats: null,
+                paused: null, view: '', ws: null, r };
+    sf = s;
+    const origRun = r.pg.run.bind(r.pg), origPrepare = r.pg.prepare.bind(r.pg);
+    const send = (m) => { if (s.ws && s.ws.readyState === 1) s.ws.send(JSON.stringify(m)); };
+    s.send = send;
+    const fail = (why) => {
+      if (s.failed) return;
+      s.failed = true; s.open = false;
+      console.warn('[frames] app frames off, back to this page\'s connections:', why);
+      for (const w of s.waiters.splice(0)) w.reject(new Error('frames stream closed'));
+      if (running) resizePool(wantConns);
+    };
+    const deliver = (frame) => {
+      const w = s.waiters.shift();
+      if (w) w.resolve([{ rows: [[frame]] }]); else s.latest = frame;
+    };
+    const ws = new WebSocket(`${proto}://${location.host}/frames?tab=${doomTab}${doomGameQ}`);
+    ws.binaryType = 'arraybuffer';
+    s.ws = ws;
+    ws.onopen = () => {
+      s.open = true;
+      send({ conns: wantConns, ...(s.view ? { view: s.view } : {}) });
+      post('render_conns', { n: wantConns });
+    };
+    ws.onerror = () => fail('socket error');
+    ws.onclose = (ev) => fail(`closed (${ev.code}${ev.reason ? ' ' + ev.reason : ''})`);
+    ws.onmessage = (ev) => {
+      if (typeof ev.data === 'string') {
+        try { const m = JSON.parse(ev.data); if (m.stats) s.stats = m.stats; } catch (e) { /* */ }
+        return;
+      }
+      const now = performance.now();
+      const dv = new DataView(ev.data);
+      const ms = dv.getUint32(4) / 100, flags = dv.getUint8(8);
+      let frame = null;
+      if (!(flags & 2)) {
+        frame = new Uint8Array(ev.data, 9);
+        if (flags & 1) {
+          const p = s.prev.get(frame.length);
+          if (!p) return;                       // cannot undo the XOR: wait for the next
+          const out = new Uint8Array(frame.length);
+          for (let i = 0; i < out.length; i++) out[i] = frame[i] ^ p[i];
+          frame = out;
+        } else {
+          frame = frame.slice();
+        }
+        s.prev.set(frame.length, frame);
+        bd.db += ms; bd.dbN++;
+      }
+      const probe = r.probes.find((x) => !x.done);
+      if (probe) { probe.first = probe.first || now; probe.last = now; probe.parsed = performance.now(); }
+      deliver(frame);
+    };
+    // pause while the loading screen is up or the automap shows (no frames drawn)
+    const pauseTimer = setInterval(() => {
+      if (!running || s.failed) { clearInterval(pauseTimer); return; }
+      const p = automap.on || (framesPaused && performance.now() < framesPausedUntil);
+      if (p !== s.paused && s.open) { s.paused = p; send({ pause: p }); }
+    }, 200);
+    r.pg.run = (steps) => {
+      if (sfOn() && !automap.on && steps.length === 1) {
+        if (steps[0].name === 'camera') return Promise.resolve([{ rows: [] }]);
+        if (steps[0].name === r.frameName) {
+          if (s.latest !== null) { const f = s.latest; s.latest = null; return Promise.resolve([{ rows: [[f]] }]); }
+          return new Promise((resolve, reject) => s.waiters.push({ resolve, reject }));
+        }
+      }
+      return origRun(steps);
+    };
+    r.pg.prepare = (name, sql, types) => {
+      const m = /^SELECT frame_rgb FROM (api_frame_idx_slot[1-4]_m\d{1,3}(?:_low)?)$/.exec(sql || '');
+      if (m) { s.view = m[1]; s.latest = null; send({ view: s.view }); }
+      return origPrepare(name, sql, types);
+    };
+    const origClose = r.pg.close.bind(r.pg);
+    r.pg.close = () => { try { ws.close(1000); } catch (e) { /* */ } origClose(); };
   };
 
   // One connection, r.depth lanes; the last lane out closes it (a retired
@@ -990,9 +1083,11 @@ async function play(user, password, target, nick, guest) {
           frags: stats.frags,
           health: stats.health,
           coding,
-          renderConns: conns,
-          // share of the frame clock's slots no connection could take
-          poolFull: slots ? slotsFull / slots : null,
+          renderConns: sfOn() ? (sf.stats ? sf.stats.conns : wantConns) : conns,
+          // share of the frame clock's slots no connection could take (the
+          // app's clock when it renders)
+          poolFull: sfOn() ? (sf.stats ? sf.stats.pool_full : null) : (slots ? slotsFull / slots : null),
+          frameSource: sfOn() ? 'app' : 'page',
           stale,
           breakdown: bd.n ? {
             frames: bd.n,
@@ -1017,6 +1112,7 @@ async function play(user, password, target, nick, guest) {
               INTERPOLATE && 'doomInterp',
               !INPUT_NOW && 'doomInputNow',
               !(renderPool[0] && renderPool[0].coalesce) && 'doomCoalesce',
+              !SERVER_FRAMES && 'doomServerFrames',
             ].filter(Boolean),
             gapP50: pct(bd.gaps, 0.5),
             gapMax: pct(bd.gaps, 1),
@@ -1045,9 +1141,18 @@ async function play(user, password, target, nick, guest) {
   // Grow by opening connections one after another; shrink by retiring the
   // newest ones, each after its frame in flight. Changes queue up in order.
   const resizePool = (n) => {
-    poolTarget = POOL_SIZES.includes(n) ? n : 1;
+    wantConns = POOL_SIZES.includes(n) ? n : 1;
+    // app frames: one page connection (the stream and the automap); the
+    // render threads are the app's (frames.py)
+    if (SERVER_FRAMES && sf && !sf.failed) {
+      poolTarget = 1;
+      if (sf.open) { sf.send({ conns: wantConns }); post('render_conns', { n: wantConns }); }
+    } else {
+      poolTarget = wantConns;
+    }
     poolChange = poolChange.then(async () => {
-      while (running && liveRenders().length < poolTarget) {
+      // the first connection may attach the app's stream: then one is enough
+      while (running && liveRenders().length < (SERVER_FRAMES && sf && !sf.failed ? 1 : poolTarget)) {
         let r;
         try {
           r = await openRender();
@@ -1060,9 +1165,9 @@ async function play(user, password, target, nick, guest) {
         renderPool.push(r);
         renderLoop(r);
       }
-      for (const r of liveRenders().slice(poolTarget)) r.retired = true;
+      for (const r of liveRenders().slice(poolTarget)) { if (r !== (sf && sf.r)) r.retired = true; }
       const live = liveRenders();
-      post('render_conns', { n: live.length });
+      if (!sfOn()) post('render_conns', { n: live.length });
     });
     return poolChange;
   };

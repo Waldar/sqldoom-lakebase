@@ -84,7 +84,10 @@
   .pane-label b { color: var(--text); font-weight: 500; }
   #music-vol-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
   #music-vol-wrap[hidden] { display: none; }
-  #music-vol { width: 90px; accent-color: var(--lava2); }
+  /* not the text fields' look (.controls input: padding, border, background):
+     with it the thumb stopped short of both ends (owner, 2026-11-19) */
+  #music-vol { width: 90px; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent;
+               accent-color: var(--lava2); }
   .pane iframe { width: 100%; aspect-ratio: 16 / 10; display: block; border: 0; }
   /* end of a deathmatch: stay or go solo (host.js, game modes) */
   #dm-choice { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 3;

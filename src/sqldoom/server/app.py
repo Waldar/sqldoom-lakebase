@@ -42,7 +42,7 @@ from fastapi.staticfiles import StaticFiles
 from sqldoom.game.referee import REFEREE_ENV
 from sqldoom.lakebase.connection import CREDS, endpoints
 from sqldoom.lakebase.games import GameError, GameManager
-from sqldoom.server import relay, rules
+from sqldoom.server import frames, relay, rules
 from sqldoom.server.metrics import METRICS
 
 REPO = Path(__file__).resolve().parents[3]
@@ -238,6 +238,14 @@ async def pg(ws: WebSocket):
     q = ws.query_params
     await relay.serve(ws, q.get("target", "primary"), q.get("guest") == "1", ENDPOINTS, METRICS,
                       games=GAMES, game_id=q.get("game", ""))
+
+
+# Frames rendered here, next to the database, and pushed to the page
+# (sqldoom.server.frames); the page falls back to its own render connections
+# through /pg when this socket cannot open.
+@app.websocket("/frames")
+async def frames_ws(ws: WebSocket):
+    await frames.serve(ws, GAMES, ws.query_params.get("game", ""))
 
 
 # The game page runs in an iframe at /game/?embed=1. Its config.json fetch is

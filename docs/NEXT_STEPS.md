@@ -45,6 +45,8 @@ The page plays music already (`Audio.setMusic`, `api_stage_music`), but `music_a
 
 ## 3. Frames rendered in the app, pushed to the browser (big)
 
+**First version shipped 2026-11-19** (`src/sqldoom/server/frames.py`, route `/frames`): per player tab, render threads in the app (its own connections, logged in as the player) on one 35 Hz clock in turn, the same camera + frame views, one sender pushing the newest frame XOR-coded; the page's first render connection stands in for the stream (camera answered at once, a frame = the next one pushed), so its clock, drawing and stats are unchanged; the automap stays on that connection; auto's connection count, the view and pause go to the app; the page falls back to its own connections if the socket fails; `localStorage.doomServerFrames = '0'` forces the old path. Checked on a scratch branch: frames byte-identical to the views (full and low detail, decoded by the page's own code), 35 frames/s on 3 threads, pause, view check. Not yet: frames started on the tic commit (still the 35 Hz clock), the camera from player_state instead of api_camera, input on the same socket.
+
 Why: the browser asks for every frame across the internet (~15-30 ms each way here). Pipelining hides it for the frame rate, but each frame still starts on the browser's clock and after a trip to the app. LBDoom's app (`webapp/engine.py`) renders next to the database and pushes finished frames: a frame starts the moment a tic commits and draws that tic; the network only delays the picture.
 
 Design (LBDoom's, fitted to ours):

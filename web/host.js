@@ -423,7 +423,8 @@ function spark(id, a, ref) {
 }
 
 function onStats(m) {
-  Object.assign(live, { fps: m.fps, browserMs: m.msPerFrame, ticRtt: m.ticMs, kbps: m.kbps, wireKbps: m.wireKbps, poolFull: m.poolFull });
+  Object.assign(live, { fps: m.fps, browserMs: m.msPerFrame, ticRtt: m.ticMs, kbps: m.kbps, wireKbps: m.wireKbps, poolFull: m.poolFull,
+                        frameSource: m.frameSource });
   if (m.renderConns != null) live.conns = m.renderConns;
   if (m.breakdown) live.bd = m.breakdown;
   const b = live.bd || {};
@@ -649,6 +650,7 @@ $('copy').addEventListener('click', async () => {
   const ldStr = ld ? ' \u00b7 low detail' : '';
   const text = [
     `SQLDoom on Lakebase \u00b7 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`,
+    `frames ${live.frameSource === 'app' ? 'rendered in the app and pushed (/frames)' : 'asked for by this page (/pg)'}`,
     `${live.conns ?? '?'} frames in flight${ldStr}${connsAuto ? ` \u00b7 auto, needed ${live.autoNeeded ?? '?'}` : ''} \u00b7 pool full ${live.poolFull == null ? '\u2014' : fmt(100 * live.poolFull, 0) + '%'} \u00b7 target ${FPS_TARGET} fps`,
     `${fmt(live.fps, 1)} fps \u00b7 ${fmt(live.browserMs, 0)} ms/frame (browser) \u00b7 ${fmt(live.srv, 0)} ms/frame (at Lakebase)`,
     `tic p50 ${fmt(t.p50_ms, 1)} \u00b7 p99 ${fmt(t.p99_ms, 1)} \u00b7 max ${fmt(t.max_ms, 1)} ms \u00b7 ${t.over_budget ?? 0} over budget \u00b7 ${fmt(t.per_s, 0)}/s \u00b7 referee ${live.referee ?? '?'}`,
