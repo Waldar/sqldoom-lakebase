@@ -1,5 +1,21 @@
-"""Render Doom's MIDI music to compressed audio at import time."""
+"""Render Doom's MIDI music to compressed audio (Ogg Vorbis).
+
+Two ways, the first that is installed wins (as LBDoom's midi_render.py,
+2026-11-17):
+
+* fluidsynth and ffmpeg, from the system's packages;
+* the tinysoundfont and soundfile packages from pip (prebuilt for x86 Linux,
+  so on this workspace's serverless compute: pip install --no-deps
+  tinysoundfont && pip install soundfile numpy; without --no-deps pip tries
+  to build its pyaudio dependency, for live playback only, which needs
+  PortAudio).
+
+Either needs a General MIDI soundfont: DOOM_SOUNDFONT names one (for
+example a .sf2 in a Unity Catalog volume next to DOOM1.WAD), or one of the
+system paths below. tools/render_music.py renders a branch's tracks.
+"""
 import ctypes
+import io
 import os
 import shutil
 import subprocess
@@ -63,20 +79,33 @@ def _load_library():
 
 
 def soundfont():
-    for path in SOUNDFONTS:
-        if os.path.isfile(path):
+    for path in (os.getenv("DOOM_SOUNDFONT"), *SOUNDFONTS):
+        if path and os.path.isfile(path):
             return path
     return None
 
 
+def _pip_modules():
+    try:
+        import numpy
+        import soundfile
+        import tinysoundfont
+    except ImportError:
+        return None
+    return numpy, soundfile, tinysoundfont
+
+
+def _fluidsynth():
+    lib = _load_library()
+    return lib if lib is not None and shutil.which("ffmpeg") is not None else None
+
+
 def unavailable_reason():
     """Why rendering cannot run, or None when it can."""
-    if _load_library() is None:
-        return "libfluidsynth not found"
     if soundfont() is None:
-        return "no General MIDI soundfont installed"
-    if shutil.which("ffmpeg") is None:
-        return "ffmpeg not found"
+        return "no General MIDI soundfont (set DOOM_SOUNDFONT to a .sf2)"
+    if _fluidsynth() is None and _pip_modules() is None:
+        return "neither fluidsynth and ffmpeg nor the tinysoundfont and soundfile packages found"
     return None
 
 
@@ -126,10 +155,44 @@ def _render_wav(lib, midi, sf2, wav_path):
 
 def render(midi):
     """MIDI bytes -> Ogg Vorbis bytes, or None when it could not be rendered."""
-    lib = _load_library()
     sf2 = soundfont()
-    if lib is None or sf2 is None or shutil.which("ffmpeg") is None:
+    if sf2 is None:
         return None
+    lib = _fluidsynth()
+    if lib is not None:
+        return _render_fluidsynth(lib, midi, sf2)
+    if _pip_modules() is not None:
+        return _render_tinysoundfont(midi, sf2)
+    return None
+
+
+def _render_tinysoundfont(midi, sf2):
+    """TinySoundFont plays the MIDI on the soundfont; libsndfile encodes it."""
+    numpy, soundfile, tinysoundfont = _pip_modules()
+    from tinysoundfont.midi import load_memory
+    rate = int(SAMPLE_RATE)
+    synth = tinysoundfont.Synth(samplerate=rate)
+    sfid = synth.sfload(sf2)
+    for channel in range(16):
+        # MIDI channel 10 (9 counting from zero) is General MIDI's percussion.
+        synth.program_select(channel, sfid, 0, 0, channel == 9)
+    sequencer = tinysoundfont.Sequencer(synth)
+    sequencer.add(load_memory(bytes(midi)))
+    block = rate // 10
+    out, blocks = io.BytesIO(), 0
+    # A block at a time: libsndfile's Vorbis encoder crashes on a whole
+    # track in one write (LBDoom).
+    with soundfile.SoundFile(out, mode="w", samplerate=rate, channels=1,
+                             format="OGG", subtype="VORBIS") as ogg:
+        while not sequencer.is_empty() and blocks < 600 * 10:  # 10 minutes at most
+            stereo = numpy.frombuffer(synth.generate(block), dtype=numpy.float32).reshape(-1, 2)
+            # Mono like the fluidsynth render, at its gain; a few tracks would clip.
+            ogg.write(numpy.clip(stereo.mean(axis=1) * GAIN, -1.0, 1.0))
+            blocks += 1
+    return out.getvalue() if blocks else None
+
+
+def _render_fluidsynth(lib, midi, sf2):
     with tempfile.TemporaryDirectory(prefix="doom-music-") as tmp:
         wav = os.path.join(tmp, "track.wav")
         ogg = os.path.join(tmp, "track.ogg")

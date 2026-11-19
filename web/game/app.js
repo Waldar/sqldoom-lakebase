@@ -23,6 +23,9 @@ let sendInputNow = null;   // set while playing
 // api_cheat_key, which also checks the match is solo.
 let cheatsOn = false;
 let sendCheat = null;      // set while playing
+// The level's music: single player only, the host page's Music box
+// (action 'music'); off, no track is fetched.
+let musicOn = false;
 const TURN_DEGREES_PER_TIC = 3.2;
 const MOUSE_SENSITIVITY = 0.15;
 const W = 320, H = 200;
@@ -520,6 +523,7 @@ async function play(user, password, target, nick, guest) {
   };
   const loadMusic = async () => {
     if (!audio) return;
+    if (!musicOn) { audio.stopMusic(); return; }
     try {
       const [m] = await pg.run([{ name: 'music', binary: true }]);
       const row = m.rows[0];
@@ -527,6 +531,7 @@ async function play(user, password, target, nick, guest) {
       await audio.setMusic(new TextDecoder().decode(row[0]), row[1]);
     } catch (e) { console.warn('music unavailable', e); }
   };
+  window.doomMusic = () => { if (running) loadMusic(); };
   readMatch((await pg.run([{ name: 'match' }]))[0].rows[0]);
   await prepareFrame();
   ui.overlay.hidden = true;
@@ -1159,6 +1164,10 @@ async function setup() {
       // loading screen between two maps: no frame requests while it is up
       if (m.action === 'frames_pause' && window.doomPauseFrames) window.doomPauseFrames(!!m.on);
       if (m.action === 'cheats') cheatsOn = !!m.on;
+      if (m.action === 'music') {
+        musicOn = !!m.on;
+        if (window.doomMusic) window.doomMusic();
+      }
       // page-level handler: play()'s variables are reached through doomSetLowDetail
       if (m.action === 'low_detail') {
         lowDetail = !!m.on;

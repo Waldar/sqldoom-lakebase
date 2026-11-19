@@ -189,6 +189,20 @@ ldBox.addEventListener('change', () => {
   game.focus();
 });
 
+// Music: Doom's track for the level, single player only (the box shows in a
+// solo game); remembered per browser, on by default.
+const musicBox = $('music-box');
+musicBox.checked = localStorage.getItem('sqldoom.music') !== '0';
+const sendMusic = () => {
+  $('music-label').hidden = GAME.mode !== 'solo';
+  game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music', on: musicBox.checked && GAME.mode === 'solo' }, '*');
+};
+musicBox.addEventListener('change', () => {
+  localStorage.setItem('sqldoom.music', musicBox.checked ? '1' : '0');
+  sendMusic();
+  game.focus();
+});
+
 function status(text, bad = false) {
   $('status').textContent = text;
   $('status').classList.toggle('bad', bad);
@@ -221,6 +235,7 @@ window.addEventListener('message', (ev) => {
     case 'ready':
       sendConns();
       sendLowDetail();
+      sendMusic();
       if (wantPlay) play();
       else nickEl.focus();
       break;
@@ -235,6 +250,7 @@ window.addEventListener('message', (ev) => {
       $('pane').classList.toggle('live', state === 'playing');
       // cheat codes: single player only (api_cheat_key refuses otherwise too)
       game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'cheats', on: state === 'playing' && GAME.mode === 'solo' }, '*');
+      sendMusic();
             if (state === 'playing') {
         live.slot = m.slot;
         // Guests all log in as the app's identity; the name is what others see.
