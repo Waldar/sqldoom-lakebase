@@ -116,7 +116,11 @@ events AS (
 
   UNION ALL
   SELECT p.map_id,'impact:'||i.projectile_id::text,p.level_tic,
-         CASE i.projectile_type WHEN 'rocket' THEN 'DSRXPLOD'
+         -- info.c deathsound: MT_ROCKET sfx_barexp, MT_BFG sfx_rxplod, the
+         -- plasma and the monsters' fireballs sfx_firxpl. (Until 2026-11-19
+         -- the rocket had the BFG's sound and the BFG the fireballs'.)
+         CASE i.projectile_type WHEN 'rocket' THEN 'DSBAREXP'
+                                WHEN 'bfg' THEN 'DSRXPLOD'
               ELSE 'DSFIRXPL' END,
          i.owner_thing_id,i.x::real,i.y::real
   FROM world_pos p JOIN projectile_impacts i ON i.map_id=p.map_id
