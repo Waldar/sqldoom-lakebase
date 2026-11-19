@@ -643,7 +643,6 @@ async function play(user, password, target, nick, guest) {
   }
   let poolTarget = 1;
   let poolChange = Promise.resolve();
-  let nextFrameAt = performance.now();
   let avgRenderMs = 400;
   let seqIssued = 0, seqShown = 0, stale = 0;
   let poolWire = 0, poolWireMark = 0;
@@ -707,12 +706,39 @@ async function play(user, password, target, nick, guest) {
   };
   const pct = (a, q) => (a.length ? a.slice().sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(a.length * q))] : null);
 
-  const pace = async () => {
-    const interval = Math.max(maxFps ? 1000 / maxFps : 0, avgRenderMs / Math.max(1, liveLanes()));
-    const now = performance.now();
-    const at = Math.max(now, nextFrameAt);
-    nextFrameAt = at + interval;
-    if (at > now) await sleep(at - now);
+  // ---- one frame clock, frames handed out in turn ---------------------------
+  // Every 1/maxFps s (35 a second) the clock hands one frame slot to the next
+  // connection, in turn, that has a request lane free (r.depth per
+  // connection). A slot no connection can take is counted ("pool full"):
+  // the host's auto setting adds a connection on that, and takes one away
+  // when fewer would do (host.js). Before 2026-11-19 every request paced
+  // itself (average round trip / requests in flight), with no common clock.
+  const waiting = new Map();          // connection -> lanes ready for a frame
+  let rr = 0, slots = 0, slotsFull = 0;
+  const claimSlot = (r) => new Promise((resolve) => {
+    if (!waiting.has(r)) waiting.set(r, []);
+    waiting.get(r).push(resolve);
+  });
+  const dispatch = () => {
+    for (const [r, q] of waiting) {
+      if (r.retired || !running) { q.splice(0).forEach((go) => go()); waiting.delete(r); }
+    }
+    if (!running) return;
+    slots++;
+    const pool = liveRenders();
+    for (let k = 0; k < pool.length; k++) {
+      const q = waiting.get(pool[(rr + k) % pool.length]);
+      if (q && q.length) { rr = (rr + k + 1) % pool.length; q.shift()(); return; }
+    }
+    slotsFull++;
+  };
+  let clockAt = performance.now();
+  const frameClock = () => {
+    dispatch();
+    if (!running) return;
+    const interval = maxFps ? 1000 / maxFps : Math.max(5, avgRenderMs / Math.max(1, liveLanes()));
+    clockAt = Math.max(clockAt + interval, performance.now() - interval);   // no burst after a stall
+    setTimeout(frameClock, Math.max(0, clockAt - performance.now()));
   };
 
   const openRender = async () => {
@@ -784,7 +810,7 @@ async function play(user, password, target, nick, guest) {
 
   const renderLane = async (r) => {
     while (running && !r.retired) {
-      await pace();
+      await claimSlot(r);
       if (!running || r.retired) break;
       if (!frameSql) { await sleep(100); continue; }
       if (framesPaused && performance.now() < framesPausedUntil) { await sleep(50); continue; }
@@ -915,6 +941,8 @@ async function play(user, password, target, nick, guest) {
           health: stats.health,
           coding,
           renderConns: conns,
+          // share of the frame clock's slots no connection could take
+          poolFull: slots ? slotsFull / slots : null,
           stale,
           breakdown: bd.n ? {
             frames: bd.n,
@@ -949,6 +977,7 @@ async function play(user, password, target, nick, guest) {
         Object.assign(bd, { pingKeep: bd.pingN ? bd.ping / bd.pingN : bd.pingKeep });
         Object.assign(bd, { n: 0, cam: 0, first: 0, xfer: 0, decode: 0, wait: 0, db: 0, dbN: 0, relayRt: 0, relayRtN: 0, ping: 0, pingN: 0, gaps: [], stall: 0 });
         stats.frames = 0; stats.bytes = 0; stats.rtt = 0; stats.tics = 0; stats.ticRtt = 0; stale = 0;
+        slots = 0; slotsFull = 0;
         stats.since = performance.now();
         pg.run([{ name: 'score' }, { name: 'match' }]).then(([sc, m]) => {
           renderScore(sc.rows, user); readMatch(m.rows[0]);
@@ -1004,6 +1033,7 @@ async function play(user, password, target, nick, guest) {
     frameSql = `SELECT frame_rgb FROM api_frame_idx_slot${slot}_m${frameMap}${lowDetail ? '_low' : ''}`;
   };
   resizePool(renderConns);
+  frameClock();
 
   const stop = (why, bad) => {
     if (!running) return;

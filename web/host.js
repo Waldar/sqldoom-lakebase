@@ -84,7 +84,44 @@ $('map-go').addEventListener('click', async () => {
 // (p90, 2 s window, any second) ratcheted down to 1-2 on E1M6: one 250 ms
 // tic put a 2 s window under 32.5 tics/s, and a p90 of 21-26 ms never let
 // it grow again.
-const AUTO_MIN = 2;
+//
+// Since 2026-11-19 auto also aims at 35 frames/s with the fewest connections
+// that rate needs (frames now take ~45 ms at the database: 34.9 frames/s on
+// 2 connections, while the old rule climbed to 6 whenever the tic was
+// healthy). The page hands frames out in turn on one 35 Hz clock and reports
+// the share of slots no connection could take ("pool full"). autoNext():
+//  1. the tic first, unchanged: a really slow game gives a connection back;
+//  2. under 33.5 frames/s, or pool full on > 5% of slots: one more, up to
+//     needed + 1, where needed = ceil(35 x frame ms at the database / 1000
+//     x 1.15) (a connection delivers 1000 / frame ms frames/s, its two
+//     requests queued);
+//  3. at 34+ frames/s with more than needed for 10 s: one fewer. A shrink
+//     that has to be undone within 8 s keeps that size for 60 s.
+const AUTO_MIN = 1;
+const FPS_TARGET = 35;
+function autoNeeded(dbMs) {
+  return typeof dbMs === 'number' && dbMs > 0 ? Math.max(1, Math.ceil(FPS_TARGET * dbMs / 1000 * 1.15)) : null;
+}
+function autoNext(n, t, fps, dbMs, poolFull, now, mem) {
+  const p75 = t.p75_ms ?? t.p50_ms;
+  if (p75 > 32 || t.per_s < 32) { mem.okSince = null; return n > AUTO_MIN ? n - 1 : n; }   // never grow on a slow tic
+  const need = autoNeeded(dbMs) ?? n;
+  const cap = Math.min(AUTO_MAX, Math.max(2, need + 1));
+  const short = (typeof fps === 'number' && fps < FPS_TARGET - 1.5) || (poolFull ?? 0) > 0.05;
+  if (short && n < cap) {
+    if (now - (mem.shrunkAt ?? -1e9) < 8000) mem.floorUntil = now + 60000, mem.floor = n + 1;
+    mem.okSince = null;
+    return n + 1;
+  }
+  const floor = now < (mem.floorUntil ?? 0) ? mem.floor : AUTO_MIN;
+  if (!short && typeof fps === 'number' && fps >= FPS_TARGET - 1 && n > Math.max(need, floor)) {
+    mem.okSince = mem.okSince ?? now;
+    if (now - mem.okSince >= 10000) { mem.okSince = null; mem.shrunkAt = now; return n - 1; }
+    return n;
+  }
+  mem.okSince = null;
+  return n;
+}
 const CONN_CHOICES = [1, 2, 4, 6];
 const CONN_DEFAULT = 4, AUTO_MAX = 6;
 const saved = localStorage.getItem('sqldoom.renderConns');
@@ -110,6 +147,7 @@ for (const b of document.querySelectorAll('#conns button')) {
 }
 markConns();
 let paceChangedAt = 0;
+const autoMem = {};
 setInterval(async () => {
   if (!connsAuto || state !== 'playing' || document.hidden) return;
   // The loading screen stops the tic (and the 3 s window after it still holds
@@ -120,11 +158,11 @@ setInterval(async () => {
   try { t = (await (await fetch(`/api/metrics?window=3${gq()}`)).json()).tic; } catch (e) { return; }
   if (!t || t.n < 30) return;                     // paused, or the referee restarting
   const now = performance.now(), p75 = t.p75_ms ?? t.p50_ms;
+  void p75;
   if (now - paceChangedAt < 2000) return;
-  let n = renderConns;
-  if ((p75 > 32 || t.per_s < 32) && n > AUTO_MIN) n -= 1;
-  else if (p75 < 27 && t.per_s >= 34 && n < AUTO_MAX) n += 1;
-  else if (n < AUTO_MIN) n = AUTO_MIN;
+  const dbMs = live.bd?.db ?? live.srv;
+  live.autoNeeded = autoNeeded(dbMs);
+  const n = autoNext(renderConns, t, live.fps, dbMs, live.poolFull, now, autoMem);
   if (n !== renderConns) {
     renderConns = n; paceChangedAt = now;
     sendConns(); markConns();
@@ -308,7 +346,7 @@ function spark(id, a, ref) {
 }
 
 function onStats(m) {
-  Object.assign(live, { fps: m.fps, browserMs: m.msPerFrame, ticRtt: m.ticMs, kbps: m.kbps, wireKbps: m.wireKbps });
+  Object.assign(live, { fps: m.fps, browserMs: m.msPerFrame, ticRtt: m.ticMs, kbps: m.kbps, wireKbps: m.wireKbps, poolFull: m.poolFull });
   if (m.renderConns != null) live.conns = m.renderConns;
   if (m.breakdown) live.bd = m.breakdown;
   const b = live.bd || {};
@@ -534,7 +572,7 @@ $('copy').addEventListener('click', async () => {
   const ldStr = ld ? ' \u00b7 low detail' : '';
   const text = [
     `SQLDoom on Lakebase \u00b7 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`,
-    `${live.conns ?? '?'} frames in flight${ldStr}`,
+    `${live.conns ?? '?'} frames in flight${ldStr}${connsAuto ? ` \u00b7 auto, needed ${live.autoNeeded ?? '?'}` : ''} \u00b7 pool full ${live.poolFull == null ? '\u2014' : fmt(100 * live.poolFull, 0) + '%'} \u00b7 target ${FPS_TARGET} fps`,
     `${fmt(live.fps, 1)} fps \u00b7 ${fmt(live.browserMs, 0)} ms/frame (browser) \u00b7 ${fmt(live.srv, 0)} ms/frame (at Lakebase)`,
     `tic p50 ${fmt(t.p50_ms, 1)} \u00b7 p99 ${fmt(t.p99_ms, 1)} \u00b7 max ${fmt(t.max_ms, 1)} ms \u00b7 ${t.over_budget ?? 0} over budget \u00b7 ${fmt(t.per_s, 0)}/s \u00b7 referee ${live.referee ?? '?'}`,
     `frame = db ${fmt(b.db, 0)} + net+proxy ${fmt(b.net, 0)} + transfer ${fmt(b.xfer, 1)} + decode ${fmt(b.decode, 1)} + wait ${fmt(b.wait, 1)} ms`,
