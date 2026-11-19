@@ -1196,7 +1196,10 @@ async function setup() {
       // loading screen between two maps: no frame requests while it is up
       if (m.action === 'frames_pause' && window.doomPauseFrames) window.doomPauseFrames(!!m.on);
       if (m.action === 'cheats') cheatsOn = !!m.on;
-      if (m.action === 'always_run') alwaysRun = !!m.on;
+      if (m.action === 'always_run') {
+        alwaysRun = !!m.on;
+        for (const el of document.querySelectorAll('.shift-does')) el.textContent = alwaysRun ? 'walk' : 'run';
+      }
       if (m.action === 'music') {
         musicOn = !!m.on;
         if (window.doomMusic) window.doomMusic();

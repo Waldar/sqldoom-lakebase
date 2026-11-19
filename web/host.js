@@ -205,10 +205,6 @@ ldBox.addEventListener('change', () => {
   game.focus();
 });
 
-// Music: Doom's track for the level, single player only (the box shows in a
-// solo game); remembered per browser, on by default.
-const musicBox = $('music-box');
-musicBox.checked = localStorage.getItem('sqldoom.music') !== '0';
 // Single player: the scoreboard (one player) gives way to the cheat codes.
 function showModeCards() {
   const solo = GAME.mode === 'solo';
@@ -220,34 +216,46 @@ function showModeCards() {
 const runBox = $('always-run');
 runBox.checked = localStorage.getItem('sqldoom.alwaysRun') !== '0';
 const sendRun = () => game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'always_run', on: runBox.checked }, '*');
+
+// The help lines say what Shift does: walk with Always run, run without.
+const showShift = () => { for (const el of document.querySelectorAll('.shift-does')) el.textContent = runBox.checked ? 'walk' : 'run'; };
+showShift();
 runBox.addEventListener('change', () => {
   localStorage.setItem('sqldoom.alwaysRun', runBox.checked ? '1' : '0');
   sendRun();
+  showShift();
   game.focus();
 });
-// Music volume: 0-100 % (default 60), remembered per browser; shown with the Music box.
+// Music: Doom's track for the level, single player only (the slider shows in
+// a solo game). The slider is the volume, 0-100 % (default 60), and 0 is no
+// music at all (no track fetched); remembered per browser. It replaced the
+// Music box (2026-11-19): a browser that had the box off and no volume yet
+// starts at 0.
 const musicVol = $('music-vol');
-const savedVol = parseInt(localStorage.getItem('sqldoom.musicVolume') ?? '60', 10);
+const savedVol = parseInt(localStorage.getItem('sqldoom.musicVolume')
+  ?? (localStorage.getItem('sqldoom.music') === '0' ? '0' : '60'), 10);
 musicVol.value = String(Number.isFinite(savedVol) ? Math.min(100, Math.max(0, savedVol)) : 60);
+const showVol = () => { $('music-vol-wrap').title = parseInt(musicVol.value, 10) ? `Music volume ${musicVol.value} %` : 'Music off (volume 0)'; };
+showVol();
 const sendMusicVolume = () => game.contentWindow?.postMessage(
   { source: 'sqldoom-host', action: 'music_volume', v: parseInt(musicVol.value, 10) / 100 }, '*');
-musicVol.addEventListener('input', () => {
-  localStorage.setItem('sqldoom.musicVolume', musicVol.value);
-  sendMusicVolume();
-});
-musicVol.addEventListener('change', () => game.focus());
+let musicSentOn = null;           // last on/off sent: the track is fetched only on a change
 const sendMusic = () => {
   showModeCards();
-  $('music-label').hidden = GAME.mode !== 'solo';
   $('music-vol-wrap').hidden = GAME.mode !== 'solo';
   sendMusicVolume();
-  game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music', on: musicBox.checked && GAME.mode === 'solo' }, '*');
+  const on = GAME.mode === 'solo' && parseInt(musicVol.value, 10) > 0;
+  musicSentOn = on;
+  game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music', on }, '*');
 };
-musicBox.addEventListener('change', () => {
-  localStorage.setItem('sqldoom.music', musicBox.checked ? '1' : '0');
-  sendMusic();
-  game.focus();
+musicVol.addEventListener('input', () => {
+  localStorage.setItem('sqldoom.musicVolume', musicVol.value);
+  showVol();
+  sendMusicVolume();
+  const on = GAME.mode === 'solo' && parseInt(musicVol.value, 10) > 0;
+  if (on !== musicSentOn) sendMusic();     // crossing 0: music on or off
 });
+musicVol.addEventListener('change', () => game.focus());
 
 function status(text, bad = false) {
   $('status').textContent = text;
