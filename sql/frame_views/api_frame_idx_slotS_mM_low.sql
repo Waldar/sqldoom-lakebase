@@ -31,9 +31,21 @@ WITH RECURSIVE render_context AS NOT MATERIALIZED (
     -- MATERIALIZED here (NOT MATERIALIZED in LBDoom): LBDoom's pose is
     -- parameters, ours a lookup in mp_players, which inlined ran ~8,000 times a
     -- frame (54 pages instead of 7,996), more as a live game's mp_players grows.
-    -- The camera pose is passed in rather than read from the player Thing, so
-    -- the client can render intermediate poses between the 35 Hz gameplay tics.
-    SELECT mp.pose_x::float8 AS x, mp.pose_y::float8 AS y, mp.pose_z::float8 AS z, mp.pose_angle::float8 AS angle FROM mp_players mp WHERE mp.map_id = {map_id} AND mp.slot = {slot} AND mp.role_name = doom_caller()
+    -- The camera of the newest tic, read from player_state (since 2026-11-19):
+    -- frames start on a tic commit and draw that tic, so the per-frame
+    -- api_camera write to mp_players is not needed. The same arithmetic as
+    -- api_camera at alpha 1, through real as the pose columns were, so the
+    -- picture is byte-identical to what the api_camera(1.0) pose gave.
+    SELECT (ps.previous_x + (ps.position_x - ps.previous_x) * 1.0::float8)::real::float8 AS x,
+           (ps.previous_y + (ps.position_y - ps.previous_y) * 1.0::float8)::real::float8 AS y,
+           (ps.previous_view_z + (ps.view_z - ps.previous_view_z) * 1.0::float8)::real::float8 AS z,
+           (w.a0 + t.turn - 360.0 * FLOOR((w.a0 + t.turn) / 360.0))::real::float8 AS angle
+    FROM mp_players mp
+    JOIN player_state ps ON ps.map_id = mp.map_id AND ps.player_thing_id = mp.player_thing_id
+    CROSS JOIN LATERAL (SELECT ps.previous_view_angle::float8 AS a0,
+                               ps.view_angle::float8 - ps.previous_view_angle::float8 + 180.0 AS d) w
+    CROSS JOIN LATERAL (SELECT (w.d - 360.0 * FLOOR(w.d / 360.0)) - 180.0 AS turn) t
+    WHERE mp.map_id = {map_id} AND mp.slot = {slot} AND mp.role_name = doom_caller()
 ), frame_clock AS (
     -- The gameplay clock, for the effects below that are pure functions of it.
     SELECT COALESCE(MAX(ps.level_tics), 0)::bigint AS t

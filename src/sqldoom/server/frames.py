@@ -183,8 +183,12 @@ class FrameStream:
         return conn, cur
 
     def _render(self, retire):
+        # The frame views read the camera from player_state (the newest tic),
+        # so no api_camera write per frame; it still runs about once a second
+        # (per thread), for the seat's last_seen, which the seat reaper reads.
         conn = cur = None
         prepared = {}
+        cam_at = 0.0
         while not (self.stop.is_set() or retire.is_set()):
             try:
                 if conn is None:
@@ -204,7 +208,10 @@ class FrameStream:
                     cur.execute(f"PREPARE {name} AS SELECT frame_rgb FROM {view}")
                     prepared[view] = name
                 t0 = time.perf_counter()
-                cur.execute("EXECUTE frames_cam")
+                if t0 - cam_at >= 1.0:
+                    cur.execute("EXECUTE frames_cam")
+                    cam_at = t0
+                    t0 = time.perf_counter()
                 cur.execute(f"EXECUTE {name}")
                 row = cur.fetchone()
                 ms = (time.perf_counter() - t0) * 1000

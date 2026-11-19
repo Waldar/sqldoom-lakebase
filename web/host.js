@@ -105,6 +105,12 @@ $('map-go').addEventListener('click', () => changeMap($('map-pick').value));
 //  3. at 34+ frames/s, or with pool full under 1% (every slot found a
 //     connection free), with more than needed for 10 s: one fewer. A shrink
 //     that has to be undone within 8 s keeps that size for 60 s.
+//  4. Contention (2026-11-19): frames are slower with more threads (81 ms on
+//     4, 49-53 ms on 3, the owner's game), so "needed" measured at n can
+//     keep n. The frame time seen at each count is remembered; after 30 s at
+//     target with pool full at 0, one fewer is tried, unless the time
+//     remembered at n - 1 already says n - 1 is too few. A try that leaves
+//     it short is undone by 2 and held by 3.
 const AUTO_MIN = 1;
 const FPS_TARGET = 35;
 function autoNeeded(dbMs) {
@@ -114,6 +120,8 @@ function autoNext(n, t, fps, dbMs, poolFull, now, mem) {
   const p75 = t.p75_ms ?? t.p50_ms;
   if (p75 > 32 || t.per_s < 32) { mem.okSince = null; return n > AUTO_MIN ? n - 1 : n; }   // never grow on a slow tic
   const need = autoNeeded(dbMs) ?? n;
+  mem.dbAt = mem.dbAt || {};
+  if (typeof dbMs === 'number' && dbMs > 0) mem.dbAt[n] = mem.dbAt[n] == null ? dbMs : mem.dbAt[n] * 0.7 + dbMs * 0.3;
   // a growth that did not help: back down, and no higher for 60 s
   if (mem.grewAt != null && now - mem.grewAt >= 6000) {
     const helped = typeof fps === 'number' && fps >= Math.min(FPS_TARGET - 1, mem.fpsBefore + 1);
@@ -136,6 +144,15 @@ function autoNext(n, t, fps, dbMs, poolFull, now, mem) {
     if (now - mem.okSince >= 10000) { mem.okSince = null; mem.shrunkAt = now; return n - 1; }
     return n;
   }
+  // 4. contention: try one fewer, unless known to be too few
+  const atTarget = typeof fps === 'number' && fps >= FPS_TARGET - 1 && (poolFull ?? 1) === 0;
+  const fewerNeed = mem.dbAt[n - 1] != null ? autoNeeded(mem.dbAt[n - 1]) : null;
+  if (!short && atTarget && n > Math.max(AUTO_MIN, floor) && (fewerNeed == null || fewerNeed <= n - 1)) {
+    mem.probeSince = mem.probeSince ?? now;
+    if (now - mem.probeSince >= 30000) { mem.probeSince = null; mem.okSince = null; mem.shrunkAt = now; return n - 1; }
+    return n;
+  }
+  mem.probeSince = null;
   mem.okSince = null;
   return n;
 }
