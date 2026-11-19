@@ -2,6 +2,8 @@
 
 State when this was written: `main` at `164e97f`, live on `sqldoom-ltap`. Full-detail frames from LBDoom's 2026-11-17 renderer (~45 ms at the database, 24 CU), 35 frames/s on 2 connections in the owner's browser once `localStorage.doomPipeline` was cleared. Ilia's code: Git folder `/Users/fabien.contaminard@databricks.com/LBDoom-latest` (his `main` `2bb97bd`; clone with the `github-databricks` credential, his GitHub has an IP allow list).
 
+Progress (2026-11-19): 0 shipped (`1843bd3`; growth rule fixed after the owner saw auto still climb to 6, see 0), 1 shipped (`aab9a36`, works), 2 shipped (`dcb57bc`: the Music box is there, no audio yet: the tracks need a General MIDI soundfont on the workspace, then `tools/render_music.py` on game-template and production). 3 and 4 not started; 4 is bigger than planned (below).
+
 Order: 0 first (small, and its rule carries over to 3); 1 and 2 are small and independent; 3 is the big one; 4 can come before or after 3 (the frame views do not change with 3).
 
 ## 0. Frames in flight: the fewest connections that keep 35 frames/s (small)
@@ -19,6 +21,7 @@ Goal (owner's call): aim at 35 frames/s, with the number of connections that rat
 * **Stats:** Copy stats and the side panel show the connections needed, "pool full" %, and frames/s against the 35 target.
 * **Size:** ~150 lines in `web/game/app.js` (clock, round robin, "pool full") and `web/host.js` (controller, stats). The manual choices (1, 2, 4, 6) stay.
 * **Tests:** in the browser: E1M1 full detail settles on 2 at 35 frames/s; low detail (still ~90-105 ms until step 4) on 4; a big fight on E1M9 that slows the tic takes connections away; switching full/low detail re-settles within 10 s; the frame rate no worse than with today's auto at every point. Copy stats before/after.
+* **Fix (2026-11-19):** the first version also grew on frames/s under 33.5 alone, and the owner saw auto climb to 6: with every slot taken, a frame rate short for another reason (network, frames out of order) kept adding connections, each slowing every frame a little, which raised "needed" and so the cap. Now it grows only when pool full > 5%, undoes a growth that did not raise the frame rate by 1 within 6 s (that size is then the most for 60 s), and also shrinks when pool full stays under 1%.
 * **With step 3** the same rule moves server-side: renders in flight per seat, started on each tic (LBDoom's `_pace_renderers` only watches the tic; ours adds the 35 frames/s target).
 
 ## 1. Cheat codes, single player only (small)
@@ -55,10 +58,17 @@ Design (LBDoom's, fitted to ours):
 * **Size:** about 600-900 lines changed: the child's render threads and tic signal (~250), the parent's frame socket and per-tab routing (~200), the page's receiver and stats (~250, minus the pool), docs. One or two sessions, then a play test solo and with 2-4 tabs.
 * **Tests:** frames byte-identical to today's views for the same tic (same SQL); 35 frames/s on 2 renders per seat on 12 and 24 CU; tic p50/p99 no worse than today (`tools/bench.py` and the play harness used for the vacuum comparison); input -> first frame with it, measured in the page (LBDoom's `?lag=1` is the model).
 
-## 4. Low detail at least as fast as full detail (medium)
+## 4. Low detail at least as fast as full detail (medium to large)
+
+Found when starting it (2026-11-19): the old low detail drew even columns only (`generate_series(a + (a & 1), b, 2)`) and laid the 160 x 168 view out pixel by pixel. LBDoom's renderer packs eight palette indices per 64-bit word (`view_rows` r0..r15: 40 groups of 8 columns, bands of 16 rows, around lines 2430-2550 of the template), so low detail needs its own packing for 160 columns (20 groups), not just the even-column rewrite. The column ranges to step by two: lines ~474 (occlusion), 639 (walls), 1107 and 1128 (player sector planes), 1725 (sprites), 2034 (weapon); `occlusion_arr` (496) is indexed by column and stays 320 wide.
 
 LBDoom has no low detail. Ours (`sql/frame_views/api_frame_idx_slotS_mM_low.sql`) is still the previous renderer (~90-105 ms, the full-detail views now ~45 ms), so it is slower than full detail.
 
 * Make the low-detail template from the full-detail one (LBDoom's renderer as converted, `api_frame_idx_slotS_mM.sql`), as the old one was made from the old: the scene's columns stepped by two (160 instead of 320, `generate_series(lo, hi, 2)` where columns are generated, the column count and pixel arithmetic of the frame tail for 160 x 168), the status bar unchanged at 320 x 32. Output 37,121 bytes, which the page already expands (`expandLow`).
 * A generator instead of a hand edit: `tools/make_low_detail.py` rewrites the full-detail template's anchors and fails if one is missing, so the next renderer update regenerates both.
 * Test, strict: on the same pose, every low-detail scene pixel equals the full-detail frame's pixel at the even column (byte-identical after `expandLow`'s doubling, except where Doom's low detail itself differs: compare with the previous low view too); status bar identical; timing on all 9 maps with `tools/frame_compare.py` (adapted for the `_low` views): low must be faster than full detail.
+
+## 5. Ideas (owner, 2026-11-19; not planned yet)
+
+* **"I'M A SHAMELESS CHEATER" in single player:** the scoreboard card (right column of `web/index.html`, filled by `renderScoreCard` in `web/host.js`) is pointless with one player; in a single-player game, replace it with a box "I'M A SHAMELESS CHEATER" that opens a menu listing Doom's cheat codes (iddqd, idkfa, idfa, idclip/idspispopd, idbehold v/s/i/r/a/l, idchoppers, idclev EM, idmus EM, iddt, idmypos) and what each does. A list only: the player still types them (step 1). Multiplayer keeps the scoreboard. Small: host page only.
+* **Run by default, Shift to walk:** today Shift runs (`web/game/app.js`, `const run = enabled && down('ShiftLeft', 'ShiftRight')`, sent to `api_input` as its run flag). Invert it: run unless Shift is held, as Doom's "always run" (`joyb_speed 29`). Probably a setting next to Low detail and Music (remembered per browser), default on; the help text and the key list on the page to match. Small: page only, the tic already takes the flag.

@@ -234,7 +234,7 @@
   <span class="spacer"></span>
   <div class="seg" id="conns" title="How many of your frames are computed at once, each on its own database connection. Only frames: the game tic runs on the primary 35 times a second whether anyone plays or not, and this setting does not change it.">
     <span class="seg-label">frames in flight</span>
-    <button data-n="auto" title="Aims at 35 frames/s with the fewest connections: one fewer when the game slows down (under 32 tics/s or p75 over 32 ms over 3 s); one more under 33.5 frames/s; one fewer after 10 s at 35 frames/s with more than needed">auto</button><button data-n="1">1</button><button data-n="2">2</button><button data-n="4">4</button><button data-n="6">6</button>
+    <button data-n="auto" title="Aims at 35 frames/s with the fewest connections: one fewer when the game slows down (under 32 tics/s or p75 over 32 ms over 3 s); one more when the connections cannot take every frame slot (pool full over 5%), undone if it does not help; one fewer after 10 s with more than needed">auto</button><button data-n="1">1</button><button data-n="2">2</button><button data-n="4">4</button><button data-n="6">6</button>
   </div>
   <label class="btn ghost" title="Render every other column (160 instead of 320), doubled in the browser. About 33% faster frames, half the bandwidth."><input type="checkbox" id="low-detail"> Low detail</label>
   <label class="btn ghost" id="music-label" hidden title="Doom's music for the level, in single player"><input type="checkbox" id="music-box"> Music</label>
