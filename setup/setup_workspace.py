@@ -9,6 +9,7 @@ see setup_notebook.ipynb, or from a laptop signed in with `databricks auth login
     from setup_workspace import Setup
     s = Setup(project="sqldoom", app="sqldoom-ltap",
               wad="/Volumes/<catalog>/<schema>/wad/DOOM1.WAD")
+              # soundfont="/Volumes/.../TimGM6mb.sf2": the music's; default: next to the WAD
     s.run()                 # every step below, in order
     s.run(until="sql")      # only the database part
 
@@ -20,7 +21,15 @@ Steps (Setup.STEPS):
               schema lobby
   maps        as doom_owner: the tables, types and the game's SQL from sql/
               (sqldoom.db), then the game's definitions and the 9 shareware
-              maps from DOOM1.WAD (sqldoom.wad), the frame views last
+              maps from DOOM1.WAD (sqldoom.wad), the frame views last; the
+              music is rendered as it loads when the soundfont is there
+  music       the tracks the maps use that have no audio yet, rendered with
+              the General MIDI soundfont (sqldoom.wad.midi), on the default
+              branch and on game-template if it exists. Needs the soundfont
+              (Setup(soundfont=...), default TimGM6mb.sf2 next to DOOM1.WAD)
+              and, without fluidsynth: pip install --no-deps tinysoundfont
+              and pip install soundfile (setup_notebook.ipynb does). Missing
+              either: says so and goes on, the game plays without music.
   sql         the game's SQL up to date (sqldoom.db.install; a no-op right
               after maps)
   app         the Databricks App with its Lakebase resource; its service
@@ -36,7 +45,9 @@ Steps (Setup.STEPS):
   config      app.yaml points at this project
   shrink      the default branch's primary back to 1 CU (lobby only)
 
-Not done here: uploading DOOM1.WAD to a volume (it cannot ship with the code),
+Not done here: uploading DOOM1.WAD to a volume (it cannot ship with the code)
+and the soundfont next to it (TimGM6mb.sf2, GPL-2: Debian's package
+timgm6mb-soundfont, /usr/share/sounds/sf2/TimGM6mb.sf2 in it),
 deploying the app (Setup.deploy(), or the app page: Deploy), giving players
 Can use on the app.
 """
@@ -58,9 +69,9 @@ def log(msg):
 
 
 class Setup:
-    STEPS = ("project", "compute", "database", "owner", "maps", "sql", "app", "template", "config", "shrink")
+    STEPS = ("project", "compute", "database", "owner", "maps", "music", "sql", "app", "template", "config", "shrink")
 
-    def __init__(self, project="sqldoom", app="sqldoom-ltap", wad=None, maps=MAPS,
+    def __init__(self, project="sqldoom", app="sqldoom-ltap", wad=None, maps=MAPS, soundfont=None,
                  db="databricks_postgres", schema="doom", role="doom_owner", template="game-template",
                  default_cu=24.0, load_cu=8.0, lobby_cu=1.0, pg_version=17, app_yaml=REPO / "app.yaml"):
         from databricks.sdk import WorkspaceClient
@@ -68,6 +79,13 @@ class Setup:
         self.project_id = project
         self.project = f"projects/{project}"
         self.app_name, self.wad, self.maps = app, wad, tuple(maps)
+        # the music's General MIDI soundfont: given, or TimGM6mb.sf2 next to the WAD
+        if not soundfont and wad and (Path(wad).parent / "TimGM6mb.sf2").is_file():
+            soundfont = str(Path(wad).parent / "TimGM6mb.sf2")
+        self.soundfont = soundfont
+        if soundfont:
+            import os
+            os.environ["DOOM_SOUNDFONT"] = soundfont   # sqldoom.wad.midi reads it
         self.db, self.schema, self.role, self.template = db, schema, role, template
         self.default_cu, self.load_cu, self.lobby_cu = float(default_cu), float(load_cu), float(lobby_cu)
         self.pg_version = pg_version
@@ -191,6 +209,38 @@ class Setup:
         finally:
             conn.close()
         log(f"maps loaded in {time.time() - t0:.0f} s: {sorted(self.loaded_maps())}")
+
+    def _music_endpoints(self):
+        """The default branch's endpoint, and game-template's if it exists."""
+        out = [(self.endpoint, self.branch.rsplit("/", 1)[-1])]
+        try:
+            eps = list(self.w.postgres.list_endpoints(parent=f"{self.project}/branches/{self.template}"))
+            if eps:
+                out.append((eps[0].name, self.template))
+        except Exception:
+            pass
+        return out
+
+    def step_music(self):
+        from sqldoom.wad import midi
+        why = midi.unavailable_reason()
+        if why:
+            log(f"music not rendered: {why}. The game plays without music; to add it, upload a General "
+                f"MIDI soundfont (TimGM6mb.sf2) next to the WAD or pass Setup(soundfont=...), "
+                f"pip install --no-deps tinysoundfont && pip install soundfile, and run step music")
+            return
+        for endpoint, where in self._music_endpoints():
+            conn = self.connect(role=self.role, endpoint=endpoint)
+            conn.autocommit = False
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(f"SET search_path = {self.schema}, public")
+                    _, failed = midi.render_missing(cur, log=lambda m, w=where: log(f"{w}: {m}"))
+                conn.commit()
+            finally:
+                conn.close()
+            if failed:
+                log(f"{where}: {len(failed)} tracks could not be rendered ({', '.join(failed)}): run step music again")
 
     def step_owner(self):
         text = (HERE / "doom_owner.sql").read_text(encoding="utf-8")
@@ -358,6 +408,21 @@ class Setup:
             got = self.loaded_maps()
             return set(self.maps) <= got, f"{len(got)} maps loaded"
 
+        def music():
+            parts, ok = [], True
+            for endpoint, where in self._music_endpoints():
+                conn = self.connect(role=self.role, endpoint=endpoint)
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT count(*), count(a.audio_data) FROM {self.schema}.music_assets a "
+                                    f"WHERE a.name IN (SELECT music_name FROM {self.schema}.map_music)")
+                        n, audio = cur.fetchone()
+                finally:
+                    conn.close()
+                ok = ok and n > 0 and audio == n
+                parts.append(f"{where} {audio} of {n} tracks with audio")
+            return ok, ", ".join(parts) + ("" if ok else " (step music)")
+
         def owner():
             r = self.sql("SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = %s", (self.schema,), fetch=True)
             lobby = self.sql("SELECT 1 FROM pg_namespace WHERE nspname = 'lobby'", fetch=True)
@@ -409,7 +474,7 @@ class Setup:
             return res and member and manage, (f"{self.app_name} ({state}): Lakebase resource {'yes' if res else 'no'}, "
                                               f"{self.role} {'yes' if member else 'no'}, Can manage {'yes' if manage else 'no'}, {a.url}")
 
-        results = [check(n, f) for n, f in (("project", project), ("maps", maps), ("owner", owner), ("sql", sql),
+        results = [check(n, f) for n, f in (("project", project), ("maps", maps), ("music", music), ("owner", owner), ("sql", sql),
                                             ("app", app), ("template", template))]
         return all(results)
 

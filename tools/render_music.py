@@ -15,8 +15,6 @@ games copy it) and on production (a future template is made from it).
 """
 import argparse
 import sys
-import time
-from concurrent.futures import ProcessPoolExecutor
 
 import psycopg2
 
@@ -34,28 +32,13 @@ def main():
     if why:
         sys.exit(f"cannot render: {why}")
     conn = psycopg2.connect(CREDS.dsn(args.endpoint, application_name="render-music", role=args.role))
-    cur = conn.cursor()
-    cur.execute("SET search_path = doom, public")
-    cur.execute("""SELECT a.name, a.midi_data FROM music_assets a
-                   WHERE a.name IN (SELECT music_name FROM map_music) %s ORDER BY a.name"""
-                % ("" if args.all else "AND a.audio_data IS NULL"))
-    todo = [(name, bytes(data)) for name, data in cur.fetchall()]
-    if not todo:
-        print("every track the maps use has audio already")
-        return
-    print(f"rendering {len(todo)} tracks with {midi.soundfont()} ...", flush=True)
-    t0 = time.time()
-    with ProcessPoolExecutor() as pool:
-        audio = dict(zip([n for n, _ in todo], pool.map(midi.render, [m for _, m in todo])))
-    done = [(n, a) for n, a in audio.items() if a]
-    for name, data in done:
-        cur.execute("UPDATE music_assets SET audio_data = %s, audio_format = %s WHERE name = %s",
-                    (psycopg2.Binary(data), midi.AUDIO_FORMAT, name))
-    conn.commit()
-    failed = sorted(n for n, a in audio.items() if not a)
-    print(f"rendered {len(done)} of {len(todo)} tracks in {time.time() - t0:.0f} s, "
-          f"{sum(len(a) for _, a in done) // 1024} KB" + (f"; failed: {', '.join(failed)}" if failed else ""))
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute("SET search_path = doom, public")
+        _, failed = midi.render_missing(cur, every=args.all, log=lambda m: print(m, flush=True))
+        conn.commit()
+    finally:
+        conn.close()
     if failed:
         sys.exit(1)
 

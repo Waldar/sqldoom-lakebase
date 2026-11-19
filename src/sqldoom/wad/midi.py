@@ -153,6 +153,38 @@ def _render_wav(lib, midi, sf2, wav_path):
         lib.delete_fluid_settings(settings)
 
 
+def render_missing(cur, every=False, log=print):
+    """Render the tracks the maps use (map_music) that have no audio yet, on
+    the connection's branch (cur: search_path with doom, a transaction the
+    caller commits). every=True: those with audio too. Returns (rendered,
+    failed names); raises RuntimeError when rendering cannot run."""
+    from concurrent.futures import ProcessPoolExecutor
+    import time
+    why = unavailable_reason()
+    if why:
+        raise RuntimeError(why)
+    cur.execute("SELECT a.name, a.midi_data FROM music_assets a WHERE a.name IN "
+                "(SELECT music_name FROM map_music)" + ("" if every else " AND a.audio_data IS NULL")
+                + " ORDER BY a.name")
+    todo = [(name, bytes(data)) for name, data in cur.fetchall()]
+    if not todo:
+        log("every track the maps use has audio already")
+        return 0, []
+    log(f"rendering {len(todo)} tracks with {soundfont()} ...")
+    t0 = time.time()
+    with ProcessPoolExecutor() as pool:
+        audio = dict(zip([n for n, _ in todo], pool.map(render, [m for _, m in todo])))
+    import psycopg2
+    done = [(n, a) for n, a in audio.items() if a]
+    for name, data in done:
+        cur.execute("UPDATE music_assets SET audio_data = %s, audio_format = %s WHERE name = %s",
+                    (psycopg2.Binary(data), AUDIO_FORMAT, name))
+    failed = sorted(n for n, a in audio.items() if not a)
+    log(f"rendered {len(done)} of {len(todo)} tracks in {time.time() - t0:.0f} s, "
+        f"{sum(len(a) for _, a in done) // 1024} KB" + (f"; failed: {', '.join(failed)}" if failed else ""))
+    return len(done), failed
+
+
 def render(midi):
     """MIDI bytes -> Ogg Vorbis bytes, or None when it could not be rendered."""
     sf2 = soundfont()
