@@ -38,6 +38,12 @@ class Metrics:
         # The loading screen between two maps (sqldoom/game/referee.py _say): the
         # referee's steps and VACUUM lines, shown by the page over the game.
         self._between = {"active": False, "title": "", "lines": [], "since": None, "ended": None}
+        # Tics committed so far, and a condition notified at each: the app's
+        # frame threads start a frame the moment a tic commits
+        # (sqldoom.server.frames). The referee's sample arrives right after
+        # its tic statement returned (autocommit: committed).
+        self.tic_count = 0
+        self.tic_done = threading.Condition()
 
     # ----------------------------------------------------------- writers
     def tic(self, wall, ms, ok):
@@ -46,6 +52,16 @@ class Metrics:
                 self.tics.append((wall, ms))
             else:
                 self.tic_failures.append(wall)
+        if ok:
+            with self.tic_done:
+                self.tic_count += 1
+                self.tic_done.notify_all()
+
+    def wait_tic(self, seen, timeout):
+        """The tic count once it is past `seen`, or as it is after `timeout` s."""
+        with self.tic_done:
+            self.tic_done.wait_for(lambda: self.tic_count > seen, timeout=timeout)
+            return self.tic_count
 
     def frame(self, pane, ms):
         with self._lock:

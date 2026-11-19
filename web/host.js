@@ -429,7 +429,9 @@ function onStats(m) {
   if (m.breakdown) live.bd = m.breakdown;
   const b = live.bd || {};
   setBig('m-fps', fmt(m.fps, 1), '');
-  $('m-fps-sub').textContent = `${live.conns ?? '\u2014'} frame${live.conns === 1 ? '' : 's'} in flight, ${fmt(m.msPerFrame, 0)} ms each in the browser`;
+  $('m-fps-sub').textContent = m.frameSource === 'app'
+    ? `${live.conns ?? '\u2014'} render thread${live.conns === 1 ? '' : 's'} in the app, frames pushed`
+    : `${live.conns ?? '\u2014'} frame${live.conns === 1 ? '' : 's'} in flight, ${fmt(m.msPerFrame, 0)} ms each in the browser`;
   push('fps', m.fps); spark('sp-fps', hist.fps);
   // Round trip: the render connection's ping when measured; else the tic's.
   const rtt = typeof b.ping === 'number' ? b.ping : m.ticMs;
@@ -648,20 +650,25 @@ $('copy').addEventListener('click', async () => {
   const b = live.bd || {}, t = live.tic || {};
   const ld = live.bd?.lowDetail;
   const ldStr = ld ? ' \u00b7 low detail' : '';
+  const app = live.frameSource === 'app';
   const text = [
     `SQLDoom on Lakebase \u00b7 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`,
     `frames ${live.frameSource === 'app' ? 'rendered in the app and pushed (/frames)' : 'asked for by this page (/pg)'}`,
-    `${live.conns ?? '?'} frames in flight${ldStr}${connsAuto ? ` \u00b7 auto, needed ${live.autoNeeded ?? '?'}` : ''} \u00b7 pool full ${live.poolFull == null ? '\u2014' : fmt(100 * live.poolFull, 0) + '%'} \u00b7 target ${FPS_TARGET} fps`,
-    `${fmt(live.fps, 1)} fps \u00b7 ${fmt(live.browserMs, 0)} ms/frame (browser) \u00b7 ${fmt(live.srv, 0)} ms/frame (at Lakebase)`,
+    `${live.conns ?? '?'} ${app ? 'render threads in the app' : 'frames in flight'}${ldStr}${connsAuto ? ` \u00b7 auto, needed ${live.autoNeeded ?? '?'}` : ''} \u00b7 pool full ${live.poolFull == null ? '\u2014' : fmt(100 * live.poolFull, 0) + '%'} \u00b7 target ${FPS_TARGET} fps`,
+    app ? `${fmt(live.fps, 1)} fps \u00b7 ${fmt(b.db ?? live.srv, 0)} ms/frame at Lakebase (rendered by the app) \u00b7 started on a tic ${b.appOnTic == null ? '\u2014' : fmt(100 * b.appOnTic, 0) + '%'}`
+        : `${fmt(live.fps, 1)} fps \u00b7 ${fmt(live.browserMs, 0)} ms/frame (browser) \u00b7 ${fmt(live.srv, 0)} ms/frame (at Lakebase)`,
     `tic p50 ${fmt(t.p50_ms, 1)} \u00b7 p99 ${fmt(t.p99_ms, 1)} \u00b7 max ${fmt(t.max_ms, 1)} ms \u00b7 ${t.over_budget ?? 0} over budget \u00b7 ${fmt(t.per_s, 0)}/s \u00b7 referee ${live.referee ?? '?'}`,
-    `frame = db ${fmt(b.db, 0)} + net+proxy ${fmt(b.net, 0)} + transfer ${fmt(b.xfer, 1)} + decode ${fmt(b.decode, 1)} + wait ${fmt(b.wait, 1)} ms`,
-    `camera ${fmt(b.camera, 0)} \u00b7 gap ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 conn round trip ${fmt(b.relayRt, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms`,
+    app ? `frame = db ${fmt(b.db, 0)} ms in the app, then pushed (the network delays the picture, not the frame rate) \u00b7 decode ${fmt(b.decode, 1)} ms in the browser`
+        : `frame = db ${fmt(b.db, 0)} + net+proxy ${fmt(b.net, 0)} + transfer ${fmt(b.xfer, 1)} + decode ${fmt(b.decode, 1)} + wait ${fmt(b.wait, 1)} ms`,
+    app ? `gap between frames ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms`
+        : `camera ${fmt(b.camera, 0)} \u00b7 gap ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 conn round trip ${fmt(b.relayRt, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms`,
     b.pipeline == null ? 'browser switches: not reported yet (no frame statistics yet)' :
     `browser switches: pipeline ${b.pipeline} per connection \u00b7 interpolate ${b.interpolate ? 'on' : 'off'} \u00b7 input at once ${b.inputNow === false ? 'off' : 'on'} \u00b7 coalesce ${b.coalesce ? 'on' : 'off'}`
       + (b.changed && b.changed.length
         ? ` \u00b7 CHANGED in this browser: ${b.changed.join(', ')} (localStorage.removeItem('<name>') and reload for the default)`
         : ' \u00b7 all defaults'),
-    `wire ${fmt(live.wireKbps, 0)} KB/s from ${fmt(live.kbps, 0)} KB/s before delta+deflate`,
+    app ? `frame socket ${fmt(b.appKbps, 0)} KB/s after XOR, before the WebSocket's deflate (its compressed size is not visible to the page), from ${fmt(live.kbps, 0)} KB/s of frames`
+        : `wire ${fmt(live.wireKbps, 0)} KB/s from ${fmt(live.kbps, 0)} KB/s before delta+deflate`,
   ].join('\n');
   const btn = $('copy');
   try {

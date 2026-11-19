@@ -883,7 +883,16 @@ async function play(user, password, target, nick, guest) {
     ws.onclose = (ev) => fail(`closed (${ev.code}${ev.reason ? ' ' + ev.reason : ''})`);
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
-        try { const m = JSON.parse(ev.data); if (m.stats) s.stats = m.stats; } catch (e) { /* */ }
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.stats) {
+            // the app's frame bytes per second (before the WebSocket's deflate)
+            const now = performance.now();
+            if (s.lastBytes != null && now > s.lastBytesAt) s.kbps = (m.stats.bytes - s.lastBytes) / 1024 / ((now - s.lastBytesAt) / 1000);
+            s.lastBytes = m.stats.bytes; s.lastBytesAt = now;
+            s.stats = m.stats;
+          }
+        } catch (e) { /* */ }
         return;
       }
       const now = performance.now();
@@ -1094,7 +1103,11 @@ async function play(user, password, target, nick, guest) {
             camera: bd.cam / bd.n,
             first: bd.first / bd.n,
             db: bd.dbN ? bd.db / bd.dbN : null,
-            net: bd.dbN ? bd.first / bd.n - bd.db / bd.dbN : null,
+            // frames from the app: no request round trip to split (the frame
+            // was pushed), so no network share; the app's own figures instead
+            net: sfOn() ? null : (bd.dbN ? bd.first / bd.n - bd.db / bd.dbN : null),
+            appOnTic: sfOn() && sf.stats ? sf.stats.on_tic : null,
+            appKbps: sfOn() ? (sf.kbps ?? null) : null,
             xfer: bd.xfer / bd.n,
             decode: bd.decode / bd.n,
             wait: bd.wait / bd.n,

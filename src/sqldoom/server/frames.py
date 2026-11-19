@@ -26,6 +26,7 @@ unchanged part of the picture zeros, which it squeezes to almost nothing.
 """
 import asyncio
 import json
+import os
 import queue
 import struct
 import threading
@@ -38,6 +39,12 @@ from sqldoom.server.relay import ALLOWED_RE, log, player_identity
 
 MAX_FPS = 35.0
 MAX_CONNS = 6
+# A frame starts the moment a tic commits (LBDoom's _claim_tic): it draws
+# that tic, an input shows in the first frame after the tic that took it.
+# No tic for IDLE_S (paused, loading, intermission): IDLE_HZ slots, so the
+# picture still follows. DOOM_FRAMES_ON_TIC=0: the plain 35 Hz clock.
+ON_TIC = os.getenv("DOOM_FRAMES_ON_TIC", "1") != "0"
+IDLE_S, IDLE_HZ = 0.2, 5.0
 HEADER = struct.Struct(">IIB")
 F_DELTA, F_NULL = 1, 2
 # A frame's session, as LBDoom's render threads (engine.py SESSION_SETTINGS):
@@ -62,8 +69,10 @@ class FrameStream:
         self.seq = 0
         self.workers = []             # [thread, retire Event]
         self.out = asyncio.Queue()
-        self.stat = {"slots": 0, "full": 0, "frames": 0, "db": 0.0}
+        self.stat = {"slots": 0, "full": 0, "frames": 0, "db": 0.0, "on_tic": 0}
         self.errors = 0
+        self.on_tic = ON_TIC and hasattr(metrics, "wait_tic")
+        self.sent_bytes = 0           # frame bytes handed to the socket (before its deflate)
 
     # ------------------------------------------------------------- control
     def configure(self, msg):
@@ -109,20 +118,35 @@ class FrameStream:
 
     # ---------------------------------------------------------------- clock
     def _clock(self):
-        """One slot every 1/35 s to whichever render thread is free; a slot no
-        thread can take is owed (at most 2) to the next free one, past that
-        it counts as pool full (the page's auto setting reads it)."""
+        """One slot per committed tic (or every 1/35 s without ON_TIC) to
+        whichever render thread is free; a slot no thread can take is owed (at
+        most 2) to the next free one, past that it counts as pool full (the
+        page's auto setting reads it). Several tics since the last slot: one
+        slot, the frame draws the newest."""
         interval = 1.0 / MAX_FPS
         at = time.perf_counter()
+        seen = self.metrics.tic_count if self.on_tic else 0
+        last_tic_at = time.perf_counter()
         while not self.stop.is_set():
-            at = max(at + interval, time.perf_counter() - interval)
-            delay = at - time.perf_counter()
-            if delay > 0:
-                time.sleep(delay)
+            on_tic = False
+            if self.on_tic:
+                now = time.perf_counter()
+                idle = now - last_tic_at > IDLE_S
+                count = self.metrics.wait_tic(seen, (1.0 / IDLE_HZ) if idle else IDLE_S)
+                if count > seen:
+                    seen, last_tic_at, on_tic = count, time.perf_counter(), True
+                elif not (time.perf_counter() - last_tic_at > IDLE_S):
+                    continue
+            else:
+                at = max(at + interval, time.perf_counter() - interval)
+                delay = at - time.perf_counter()
+                if delay > 0:
+                    time.sleep(delay)
             if self.paused or self.view is None:
                 continue
             with self.lock:
                 self.stat["slots"] += 1
+                self.stat["on_tic"] += on_tic
                 if self.idle > 0:
                     self.idle -= 1
                     self.slots.put(1)
@@ -226,7 +250,9 @@ class FrameStream:
                     else:
                         payload = (int.from_bytes(frame, "big") ^ int.from_bytes(p, "big")).to_bytes(len(frame), "big")
                         flags = F_DELTA
-                    await ws.send_bytes(HEADER.pack(seq, int(ms * 100), flags) + payload)
+                    msg = HEADER.pack(seq, int(ms * 100), flags) + payload
+                    await ws.send_bytes(msg)
+                    self.sent_bytes += len(msg)
                     sent += 1
                     self.stat["frames"] += 1
                     self.stat["db"] += ms
@@ -234,11 +260,13 @@ class FrameStream:
             if now - mark >= 1.0:
                 with self.lock:
                     st = dict(self.stat)
-                    self.stat = {"slots": 0, "full": 0, "frames": 0, "db": 0.0}
+                    self.stat = {"slots": 0, "full": 0, "frames": 0, "db": 0.0, "on_tic": 0}
                 await ws.send_text(json.dumps({"stats": {
                     "fps": round(st["frames"] / (now - mark), 1),
                     "pool_full": round(st["full"] / st["slots"], 3) if st["slots"] else None,
                     "db_ms": round(st["db"] / st["frames"], 1) if st["frames"] else None,
+                    "on_tic": round(st["on_tic"] / st["slots"], 3) if st["slots"] else None,
+                    "bytes": self.sent_bytes,
                     "conns": self.live_conns()}}))
                 mark = now
 
