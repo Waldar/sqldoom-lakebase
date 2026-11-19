@@ -731,6 +731,39 @@ WHERE t.map_id=doom_cs_activate_specials.p_map_id AND ps.map_id=t.map_id AND ps.
               JOIN line_special_defs d ON d.special=ld.special
                 AND d.mechanic='teleport'
               WHERE e.map_id=t.map_id AND e.player_thing_id=t.id);
+
+-- The telefrag (P_TeleportMove -> PIT_StompThing): the player kills every
+-- shootable thing whose box overlaps its own at the destination (centres
+-- closer than the two radii, the player's 16, on both axes) with 10000
+-- damage. P_DamageMobj ignores damage under 1000 only in god mode or with
+-- invulnerability, so neither saves a player. A monster's health goes far
+-- below minus its spawn health: its extreme death (doom_cs_monster_think).
+UPDATE thing_health h
+SET health = h.health - 10000, alive = false
+FROM things t
+JOIN thing_combat_defs cd ON cd.thing_type = t.type
+JOIN player_state tp ON tp.map_id = t.map_id AND tp.alive
+WHERE h.map_id = doom_cs_activate_specials.p_map_id AND t.map_id = h.map_id AND t.id = h.thing_id
+  AND h.alive AND t.id <> tp.player_thing_id
+  AND NOT EXISTS (SELECT 1 FROM player_state vp WHERE vp.map_id = t.map_id AND vp.player_thing_id = t.id)
+  AND ABS(t.x - tp.position_x) < cd.radius + 16.0 AND ABS(t.y - tp.position_y) < cd.radius + 16.0
+  AND EXISTS (SELECT 1 FROM line_special_events e
+              JOIN linedefs ld ON ld.map_id=e.map_id AND ld.id=e.line_id
+              JOIN line_special_defs d ON d.special=ld.special AND d.mechanic='teleport'
+              WHERE e.map_id=tp.map_id AND e.player_thing_id=tp.player_thing_id);
+
+-- Another player on the spot (deathmatch): dead, the frag to the teleporter.
+UPDATE player_state vp
+SET health = 0, alive = false, damage_count = 100, pain_face_tics = 12,
+    killer_id = tp.player_thing_id
+FROM player_state tp
+WHERE vp.map_id = doom_cs_activate_specials.p_map_id AND tp.map_id = vp.map_id
+  AND vp.player_thing_id <> tp.player_thing_id AND vp.alive AND tp.alive
+  AND ABS(vp.position_x - tp.position_x) < 32.0 AND ABS(vp.position_y - tp.position_y) < 32.0
+  AND EXISTS (SELECT 1 FROM line_special_events e
+              JOIN linedefs ld ON ld.map_id=e.map_id AND ld.id=e.line_id
+              JOIN line_special_defs d ON d.special=ld.special AND d.mechanic='teleport'
+              WHERE e.map_id=tp.map_id AND e.player_thing_id=tp.player_thing_id);
 END IF;
 
 IF (_cs.flags & 2048) <> 0 THEN

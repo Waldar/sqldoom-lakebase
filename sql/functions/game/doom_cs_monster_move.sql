@@ -62,11 +62,18 @@ FROM (
 ) e
 ON CONFLICT (map_id,player_thing_id,line_id,trigger_type) DO NOTHING;
 
--- EV_Teleport for a monster
+-- EV_Teleport for a monster. P_TeleportMove fails for a monster when anything
+-- shootable overlaps it at the destination (PIT_StompThing: only a player
+-- telefrags, outside MAP30): the monster stays where it is and tries again on
+-- a later crossing. So of several heading for one spot in a tic, one goes
+-- (the lowest id) and only if the spot is free: E1M9's pentagram takes its
+-- monsters one at a time (they stacked on each other before 2026-11-19).
 DELETE FROM monster_teleports WHERE map_id=doom_cs_monster_move.p_map_id;
 
 INSERT INTO monster_teleports (map_id,thing_id,dest_x,dest_y,dest_angle,sector_id)
 SELECT map_id,thing_id,dest_x,dest_y,dest_angle,sector_id FROM (
+  SELECT q.*, ROW_NUMBER() OVER (PARTITION BY q.map_id, q.dest_id ORDER BY q.thing_id) AS dn
+  FROM (
   SELECT c.*, ROW_NUMBER() OVER
     (PARTITION BY c.map_id,c.thing_id ORDER BY c.off_centre, c.dest_id) AS rn
   FROM (
@@ -94,7 +101,23 @@ SELECT map_id,thing_id,dest_x,dest_y,dest_angle,sector_id FROM (
      AND th.x BETWEEN t.min_x AND t.max_x
      AND th.y BETWEEN t.min_y AND t.max_y
   ) c
-) q WHERE rn=1;
+  ) q
+  WHERE q.rn=1
+    AND NOT EXISTS (
+      SELECT 1
+      FROM things o
+      LEFT JOIN thing_combat_defs ocd ON ocd.thing_type = o.type
+      LEFT JOIN thing_health oh ON oh.map_id = o.map_id AND oh.thing_id = o.id
+      LEFT JOIN player_state ops ON ops.map_id = o.map_id AND ops.player_thing_id = o.id
+      CROSS JOIN LATERAL (
+        SELECT COALESCE((SELECT mcd.radius FROM things tm JOIN thing_combat_defs mcd ON mcd.thing_type = tm.type
+                         WHERE tm.map_id = q.map_id AND tm.id = q.thing_id), 20.0)
+             + CASE WHEN ops.player_thing_id IS NOT NULL THEN 16.0 ELSE COALESCE(ocd.radius, 0.0) END AS d
+      ) r
+      WHERE o.map_id = q.map_id AND o.id <> q.thing_id
+        AND (CASE WHEN ops.player_thing_id IS NOT NULL THEN ops.alive ELSE COALESCE(oh.alive, false) END)
+        AND ABS(o.x - q.dest_x) < r.d AND ABS(o.y - q.dest_y) < r.d)
+) q2 WHERE dn=1;
 
 -- sfx_telept at the spot left behind and at the one arrived at, as
 -- EV_Teleport's two MT_TFOGs do. The fog sprite itself is not modelled.
