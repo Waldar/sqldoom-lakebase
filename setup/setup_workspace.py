@@ -14,7 +14,7 @@ see setup_notebook.ipynb, or from a laptop signed in with `databricks auth login
     s.run(until="sql")      # only the database part
 
 Steps (Setup.STEPS):
-  project     Lakebase project (Postgres 19), default endpoint size 24 CU
+  project     Lakebase project (Postgres 19), default endpoint size 16 CU
   compute     the default branch's primary sized for the map load (8 CU)
   database    schema doom, extensions btree_gist and pg_prewarm, work_mem 64 MB
   owner       doom_owner.sql parts 1 and 3: role doom_owner owns the schema,
@@ -73,7 +73,7 @@ class Setup:
 
     def __init__(self, project="sqldoom", app="sqldoom-ltap", wad=None, maps=MAPS, soundfont=None,
                  db="databricks_postgres", schema="doom", role="doom_owner", template="game-template",
-                 default_cu=24.0, load_cu=8.0, lobby_cu=1.0, pg_version=19, app_yaml=REPO / "app.yaml"):
+                 default_cu=16.0, load_cu=8.0, lobby_cu=1.0, pg_version=19, app_yaml=REPO / "app.yaml"):
         from databricks.sdk import WorkspaceClient
         self.w = WorkspaceClient()
         self.project_id = project

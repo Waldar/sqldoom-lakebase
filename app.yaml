@@ -17,11 +17,13 @@ env:
   - name: LAKEBASE_SCHEMA
     value: "doom"
   # Size of a single-player game's branch (sqldoom/lakebase/games.py; 16 by default).
-  # 24 CU since 2026-11-12, as Ilia Chibaev's LBDoom: room for the tic and
-  # several frames side by side. The project default is 24 CU too, so a solo
-  # branch is born at its size; multiplayer (32 CU) switches it for its creation.
+  # 16 CU since 2026-11-20 (24 since 2026-11-12): with frames rendered in the
+  # app, 16 CU ran the same as 24 next to 3 render threads (frame p50 45 ms,
+  # tic p50 24-25 ms on E1M9 combat, both sizes). The project default is 16
+  # CU too, so a solo branch is born at its size; multiplayer (DOOM_MULTI_CU,
+  # 32 by default) switches the default for its creation.
   - name: DOOM_SOLO_CU
-    value: "24"
+    value: "16"
   # Render threads per player at page load (1 to 4; the page can change it, auto by default).
   - name: DOOM_RENDER_CONNS
     value: "4"

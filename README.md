@@ -23,7 +23,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
         Lakebase project (Postgres 19)
           production       lobby (one row per game), 1 CU
           game-template    schema doom: WAD assets, game state, the SQL from sql/
-          g-<id>           one copy-on-write branch per game, 24 CU solo / 32 CU multi
+          g-<id>           one copy-on-write branch per game, 16 CU solo / 32 CU multi
 ```
 
 * A game's branch is created from `game-template` in about 3 s and deleted when the game ends.
@@ -69,7 +69,7 @@ The app deploys from the **repository root** (`app.yaml` is there and runs the p
 
 **Changing the game's SQL:** edit the file under `sql/` and deploy. At its next start the app installs the new version on `game-template` (new games get it; running games keep theirs). A change to a table is a new file in `sql/migrations/`.
 
-**Cost and access:** setup creates billable Databricks resources: a Medium App, a Lakebase lobby endpoint, and a 24 CU single-player or 32 CU multiplayer endpoint per active game. Use a dedicated project, review the setup prompts, and grant access only to intended players. This is a community demo, not an officially supported Databricks product.
+**Cost and access:** setup creates billable Databricks resources: a Medium App, a Lakebase lobby endpoint, and a 16 CU single-player or 32 CU multiplayer endpoint per active game. Use a dedicated project, review the setup prompts, and grant access only to intended players. This is a community demo, not an officially supported Databricks product.
 
 The details, the steps the notebook automates and troubleshooting are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 

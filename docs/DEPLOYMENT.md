@@ -2,7 +2,7 @@
 
 From an empty Databricks workspace to a playable app. Names used below (change them to yours): Lakebase project `sqldoom`, branches `production` and `game-template`, database `databricks_postgres`, schema `doom`, app `sqldoom-ltap`.
 
-**What you end up with.** A Databricks App that serves the game page and runs one game per Lakebase branch. Each new game is a copy-on-write branch of `game-template` (about 3 s), with its own endpoint (24 CU for single player, 32 CU for multiplayer) and its own game loop in the app; quitting or leaving the game idle deletes the branch. The `production` branch only holds the lobby (one row per game), so its endpoint can stay small. The game's tables and SQL are plain Postgres files in `sql/`: the setup installs them, and the app installs a new version on `game-template` whenever they change.
+**What you end up with.** A Databricks App that serves the game page and runs one game per Lakebase branch. Each new game is a copy-on-write branch of `game-template` (about 3 s), with its own endpoint (16 CU for single player, 32 CU for multiplayer) and its own game loop in the app; quitting or leaving the game idle deletes the branch. The `production` branch only holds the lobby (one row per game), so its endpoint can stay small. The game's tables and SQL are plain Postgres files in `sql/`: the setup installs them, and the app installs a new version on `game-template` whenever they change.
 
 ## Quick path: the setup notebook
 
@@ -34,7 +34,7 @@ The numbered steps below are what the notebook does, for reference or to run by 
 ## 2. Lakebase project
 
 1. Create a Lakebase project with **Postgres 19** (`Setup(pg_version=19)`, the default in `setup/setup_workspace.py`). Against Postgres 17 on 24 CU, frames are about 7.5% faster and a tic with monsters fighting about 20% faster, with identical pictures and game state (`docs/PERFORMANCE.md`). Postgres 17 works too. Lakebase has no in-place upgrade: moving means a new project (`docs/PERFORMANCE.md`, "Postgres 19"). Its default branch is `production`.
-2. Set the project's **default endpoint size to 24 CU** (min = max). New game branches get the default size at birth; a multiplayer game temporarily raises the default to 32 CU while its branch is created (`DOOM_SOLO_CU`, `DOOM_MULTI_CU`).
+2. Set the project's **default endpoint size to 16 CU** (min = max), the single-player size. New game branches get the default size at birth; a multiplayer game temporarily raises the default to 32 CU while its branch is created (`DOOM_SOLO_CU`, `DOOM_MULTI_CU`).
 3. Size the `production` primary for the map load: 8 CU or more. Once the app runs, 1 CU is enough (it only serves the lobby).
 4. In the Lakebase SQL editor (database `databricks_postgres`, on `production`):
 
@@ -165,7 +165,7 @@ Everything the game runs in Postgres is a plain file under `sql/`, installed by 
 | `DOOM_TEMPLATE_BRANCH` | `game-template` | Branch every game is copied from |
 | `LAKEBASE_DB`, `LAKEBASE_SCHEMA` | `databricks_postgres`, `doom` | Database and schema |
 | `DOOM_DB_ROLE` | `doom_owner` | Role the referee and the template refresh run as |
-| `DOOM_SOLO_CU`, `DOOM_MULTI_CU` | `16`, `32` (`app.yaml`: 24) | Endpoint size of a single-player and a multiplayer game branch |
+| `DOOM_SOLO_CU`, `DOOM_MULTI_CU` | `16`, `32` | Endpoint size of a single-player and a multiplayer game branch (16 CU ran as fast as 24 next to 3 render threads, 2026-11-20) |
 | `DOOM_MAX_GAMES` | `6` | Games at once |
 | `DOOM_GAME_IDLE_S` | `180` | A game nobody has open for that long ends (its branch is deleted) |
 | `DOOM_GAME_TTL_S` | `21600` | Expiry set on each game branch, as a safety net |
