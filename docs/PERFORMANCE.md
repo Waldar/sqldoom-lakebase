@@ -48,12 +48,34 @@ The slot change has one visible effect: `doom_cs_weapon` ages bullet puffs and b
 | Sprite occlusion (`frame_sprite_occlusion_view_sql`): sprite columns cut at the top or bottom where a wall span of the column is nearer or level (walls win ties against sprites), from the same `occ_rows`. Each Thing is expanded to its columns and hash-joined on the column; a range join Thing x wall span cost more than it saved | E1M9 full, 44 poses: mean 181.4 -> 177.4 ms, p90 213.9 -> 201.5 ms, median -2.3 ms; low 105.1 -> 103.1 ms; E1M1 full 186.9 -> 184.0 ms, low 112.7 -> 111.5 ms | byte-identical on 128 frames |
 | Pipelined frame requests (`render_pool.js`): two request lanes per render connection on the primary, so the next camera + frame is queued on the server while the previous frame travels back; still one render per connection and core. Live before (2026-11-04, E1M1, 4 connections): 17.3 fps at 178 ms of database time per frame, ~50 ms of each connection's ~230 ms cycle idle. The relay times a queued request from the previous ReadyForQuery | simulated with the measured 178 ms render and ~52 ms round trip: 4 connections 16.7 -> 22.3 fps, 6 connections 24.7 -> 33.5 fps (35 fps cap); database busy 67% -> 93% per connection | `localStorage.doomPipeline = '0'` for A/B |
 
+## Renderer and frame delivery, 2026-11-17 to 11-20
+
+The frame views now use LBDoom's renderer (Ilia Chibaev's `sql/renderer.sql`, converted for our views: see the header of `sql/frame_views/api_frame_idx_slotS_mM.sql`), and the frames are rendered in the app next to the database and pushed to the page (`src/sqldoom/server/frames.py`). A frame is about 45-55 ms at the database on 24 CU, E1M9 Nightmare; 35 frames/s takes 2-4 render threads.
+
+| Change | Where | Before -> after | Check |
+| --- | --- | --- | --- |
+| Camera pose read once (`pos AS MATERIALIZED`): inlined, its `mp_players` lookup ran ~8,000 times a frame | frame template | 7,996 -> 54 pages per frame; live frames had been 85-126 ms | identical frames |
+| Low detail generated from the full template (`tools/make_low_detail.py`; `--check` fails when the copy is stale) | `api_frame_idx_slotS_mM_low.sql` | 17-28% faster than full detail | 76/76 poses pixel-exact |
+| Frame clock at 35 Hz, round robin over the connections; a slot no connection can take is owed (at most 2) instead of lost | `web/game/app.js` | simulated, 10% of answers stalled 150-250 ms, 2 connections: 30.3 -> 33.3 frames/s, pool full 11.8% -> 3.3% | |
+| Frames rendered in the app: per tab, render threads with their own connections (about 1 ms from the database), the newest frame pushed XOR-coded over one WebSocket; the network delays the picture, not the frame rate | `frames.py`, route `/frames` | live: 35 frames/s on 3 threads, auto settling there | frames byte-identical to the views, decoded by the page's own code |
+| Frames start on each tic commit (the referee's tic sample, `Metrics.wait_tic`); 5 frames/s when no tic for 200 ms | `frames.py`, `metrics.py` | stand-in game loop at 35 tics/s: 34.8 frames/s, 100% started on a tic | |
+| Camera from `player_state` (the newest tic) instead of an `api_camera` write before every frame; `api_camera` once a second per thread for `last_seen` | frame template, `frames.py` | `mp_players` updates: one per frame (~172 in 5 s) -> 16 | 60/60 poses on 3 maps byte-identical, full and low |
+| The viewer's `player_state` row read once (`me_state AS MATERIALIZED ... LIMIT 1`): with that table's fresh statistics (the referee's re-plan `ANALYZE`) the frame planned bitmap scans and a nested loop in `plane_span_info` | frame template | analyzed: full 63.0 -> 54.8 ms, low 41.3 -> 39.7 ms; not analyzed: unchanged | 11 poses identical, full and low |
+| Auto render threads: straight to the needed count when pool full > 15%; remembers the frame time at each count and tries one fewer after 30 s at target (frames are slower with more threads: 81 ms on 4, 49-53 ms on 3, one live game) | `web/host.js` | simulated: 2 -> 4 in 2 s instead of 10-12 s of short frames; contention case 5 -> 3 | |
+| lz4 for the columns a frame decompresses (textures, flats, sprite pixels and masks, status bar, colormaps) | `sql/migrations/0002_lz4_textures.sql`, two matviews | decompressing all of them 4.0 -> 2.8 ms; frame full 43.8 -> 43.2 ms, low 32.0 -> 31.8 ms (12 E1M9 poses) | byte-identical |
+
+Where a frame's time goes (12 E1M9 Nightmare poses on a copy of `game-template`, each step timed by cutting the view after it): floors and ceilings add 8.2 ms of 42.7 ms on average, up to 21.4 ms in open views, and ~90% of that is `plane_lanes`, the per-pixel texel (about 0.44 µs a flat pixel, 0.30 µs a sky pixel). The spans, their dedupe and the per-span and per-row work cost about 1.3 ms together.
+
+Frame spikes, live E1M9 Nightmare (80 frames with `EXPLAIN (ANALYZE, BUFFERS)`): slow frames do more work, not the same work slower. The floor and ceiling spans in view (correlation 0.74) and the sprites (0.55) explain 65% of the frame time (`28.7 ms + 5.3 ms per 1,000 geometry rows + 0.09 ms per sprite`); 2 frames in 80 were more than 12 ms over that. No temporary files, sorts on disk or multi-batch hashes. On a copy, the frame time did not move with real tics at 35 Hz next to it, with 5 other frames rendering, or with two CPU-bound sessions (all within 1 ms).
+
 ## Maintenance and planner stability
 
 * **Plan invalidation.** Any VACUUM or ANALYZE of a table a cached plan reads forces a re-plan (15-110 ms spikes; a VACUUM every tic costs about 13 ms per tic on E1M9). Auto-ANALYZE is off on the per-tic tables; the referee runs ANALYZE and `DISCARD PLANS` once after a map change.
 * **Bloat on tiny hot tables.** 35 tics/s write about 17,000 dead rows a minute; `player_state` once held 8 live rows in 621 pages, costing about 6 ms per tic and 35% slower frames. Fix: `fillfactor` on the hottest tables, VACUUM FULL when the referee starts, when the first player joins, on a map change and when a table regrows, plain VACUUM every 1050 tics.
 * **`work_mem`** 64 MB at database level (8 MB: +6 ms per tic).
 * **Generic plans** for the whole tic (forced custom plans are 2.5x slower; the default mode re-planned some statements every tic, see the table above). A generic plan is built from the statistics at its first run, which is why the referee runs ANALYZE and `DISCARD PLANS` again about 60 s into a map, once monsters are awake.
+* **The re-plan's statistics reach the frames too** (2026-11-19): statistics are shared, so the frames are planned with the tic's. Only `player_state`'s changed a frame (55 -> 61 ms; `things`, `thing_health`, `monster_ai`, `render_segs`, `sectors` and 25 other game tables: no slowdown, each tested alone on a fresh copy). Leaving it out of the re-plan made the tic 0.7-0.9 ms slower (p50, 2 rounds of 525 tics), so the frame reads it once instead (`me_state`, above).
+* **Autovacuum settings** (3-way test, 2026-11-18): ours (`fillfactor` 10 on `player_state`, `monster_ai`, `game_tic_commands`; autovacuum after 1,000 changes) kept the tables small; autovacuum off without `fillfactor` grew `player_state` from 1 to 157 pages in 4 minutes.
 
 ## Tried and not kept
 
@@ -66,9 +88,14 @@ The slot change has one visible effect: `doom_cs_weapon` ages bullet puffs and b
 | One colormap string per palette | +225 ms (decompressed per pixel) |
 | `doom_const` as an inlinable SQL function | 0 |
 | `jit = off`, numeric casts, narrower wall or sprite fences, light lookup table | 0 |
-| Postgres 18 | tic about equal, frames 10% slower; staying on 17 |
+| Postgres 18 | tic about equal, frames 10% slower; staying on 17. Measured with the previous renderer: Ilia measured LBDoom's renderer on 18 with frames equal and the tic 20-30% faster, so a re-test on today's code is due |
+| Leaving `player_state` out of the referee's re-plan `ANALYZE` (2026-11-19) | frames 4-7 ms faster, tic 0.7-0.9 ms slower; replaced by `me_state` (frames as fast, tic unchanged) |
+| Sky column by column (2026-11-20): a matview of each sky column stored twice, a lane's 16 sky texels as one `substring` | pictures identical, frames 0.7 ms slower (full) and 0.5 ms (low): a pixel's cost is evaluating its expression (`CASE`, range test, key), not computing the texel's position |
+| `REPEATABLE READ` for frames | not run: a frame is one `SELECT`, which already reads one snapshot in `READ COMMITTED` |
 | Rendering on 4 read replicas | 25 FPS low detail but 9-20 tics of replica lag; overlapping renders stall replay (`hot_standby_feedback` is off) |
 
 ## What is left
 
-On E1M9 (8 CU) the tic is about 27-31 ms, spread over many stages, none above 4 ms: monster step 3.8, monster think 3.4, projectiles 2, doors 2, monster chase 1.9, sound 1.8, movement 1.5. Further gains need several small changes. In production, peaks of 100+ ms every few seconds are probably related to VACUUM FULL retries on `player_state` and `mp_players`, which often cannot get their lock ("busy after 8 tries"); not yet confirmed.
+On E1M9 (8 CU) the tic is about 27-31 ms, spread over many stages, none above 4 ms: monster step 3.8, monster think 3.4, projectiles 2, doors 2, monster chase 1.9, sound 1.8, movement 1.5. Further gains need several small changes. Live on 24 CU with the frames rendered in the app (E1M9 Nightmare, 2026-11-19), the tic was p50 24-25 ms, p99 about 30 ms.
+
+The frame: the per-pixel work of floors and ceilings (`plane_lanes`) is the largest single cost; low detail draws half the columns (a frame 43.2 -> 31.8 ms on the 12 E1M9 poses). Frame-time spikes follow the scene (see above). VACUUM FULL during play is off by default (`DOOM_VACUUM_FULL_IN_GAME`); the app logs slow frames with the tic time and the referee's VACUUM / ANALYZE next to them (`frames slow ...` lines, `DOOM_FRAMES_SLOW_LOG=0` to turn off).
