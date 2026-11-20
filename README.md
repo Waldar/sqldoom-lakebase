@@ -37,18 +37,18 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
 | `sql/migrations/` | The tables and types: `0001_baseline.sql`, then one numbered file per later change, each applied once (recorded in `doom.schema_migrations`) |
 | `sql/functions/` | The game's functions, one per file: `api/` (what the page calls), `game/` (the tic: movement, weapons, monsters, doors ...), `multiplayer/` (match, seats, modes), `render/`, `util/` |
 | `sql/views/`, `sql/matviews/`, `sql/indexes.sql` | Views, materialized views (static geometry, status-bar pixels) and indexes |
-| `sql/frame_views/` | The 5 frame-view templates as SQL functions and `doom.create_frame_views()`, which builds the 180 per-map, per-seat frame views |
+| `sql/frame_views/` | The 5 frame-view templates as SQL functions (the low-detail one generated from the full-detail one by `tools/make_low_detail.py`) and `doom.create_frame_views()`, which builds the 180 per-map, per-seat frame views |
 | `sql/seed/` | The game's definitions (things, weapons, line specials, menus, constants) and each mode's default rules, loaded with the maps |
 | `src/sqldoom/db/` | Installs and upgrades the database from `sql/`: pending migrations, then the code when it changed (`doom.schema_version`) |
 | `src/sqldoom/wad/` | Loads a Doom WAD (palettes, textures, sprites, sounds, music, maps) into the tables, then the derived data and the frame views |
 | `src/sqldoom/game/` | The game loop (`server.py`), its supervisor (`referee.py`: VACUUM policy, map changes, loading screen, status-bar cache) and its statements |
 | `src/sqldoom/lakebase/` | Lakebase connections (OAuth) and one branch per game (`games.py`: create, warm, end, template refresh) |
-| `src/sqldoom/server/` | The app: routes (`app.py`), the browser's Postgres relay, match rules, metrics |
+| `src/sqldoom/server/` | The app: routes (`app.py`), the frames rendered next to the database and pushed to the page (`frames.py`), the browser's Postgres relay, match rules, metrics |
 | `web/` | The page (`index.html`, `host.js`: menu, stats, scoreboard, rules) and the game itself in `web/game/` (canvas, input, render pool, Postgres wire protocol in the browser) |
 | `app.yaml`, `pyproject.toml`, `requirements.txt` | The Databricks App's command and settings, the Python package |
 | `setup/` | A new workspace: `setup_notebook.ipynb` and `setup_workspace.py` (idempotent steps, `Setup.status()` checks them), `doom_owner.sql`, and `DEPLOY_WITH_GENIE.md`, the runbook for an assistant |
-| `tools/` | `bench.py` (tic and frame latency), `mb_harness.py` (replays on scratch branches with game-state hashing, used for the tic work), `cedar2plpgsql.py` (the port's translator, not used any more) |
-| `docs/` | `DEPLOYMENT.md` (step by step, troubleshooting), `PERFORMANCE.md` (the optimisations, with measurements) |
+| `tools/` | `bench.py` (tic and frame latency), `mb_harness.py` (replays on scratch branches with game-state hashing, used for the tic work), `frame_compare.py` (frames pixel by pixel and their timings, between two branches), `make_low_detail.py` (regenerates the low-detail frame view; `--check` fails when it is stale), `render_music.py` (renders the music with a soundfont), `cedar2plpgsql.py` (the port's translator, not used any more) |
+| `docs/` | `DEPLOYMENT.md` (step by step, troubleshooting), `PERFORMANCE.md` (the optimisations, with measurements), `NEXT_STEPS.md` (the plan of 2026-11-18 and its progress) |
 
 ## Quick start
 
@@ -62,7 +62,7 @@ By hand:
 
 1. Clone `https://github.com/Waldar/sqldoom-lakebase.git` as a Git folder. This repository is public; no access to the original private monorepo is needed.
 2. Upload `DOOM1.WAD` to a Unity Catalog volume.
-3. Open [`setup/setup_notebook`](setup/setup_notebook.ipynb), set its three widgets (project, app, WAD path) and run it on serverless compute. It creates the Lakebase project, installs the tables and the game's SQL, loads the maps, creates the app and `game-template`, and can deploy it.
+3. Open [`setup/setup_notebook`](setup/setup_notebook.ipynb), set its widgets (project, app, WAD path, and optionally the music's soundfont) and run it on serverless compute. It creates the Lakebase project, installs the tables and the game's SQL, loads the maps, renders the music, creates the app and `game-template`, and can deploy it.
 4. Give players Can use on the app.
 
 The app deploys from the **repository root** (`app.yaml` is there and runs the package in `src/`). For Git-based App deployment, select branch `main` and leave the source code path empty.

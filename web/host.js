@@ -552,7 +552,6 @@ const rules = { data: null, dirty: false, picked: false };
 const rulesForm = $('rules-form');
 const tabToken = () => { try { return sessionStorage.getItem('sqldoom.tab') || ''; } catch (e) { return ''; } };
 const FIXED = {
-  solo: 'Fixed in single player: keys in the level, no multiplayer-only items.',
   deathmatch: 'Fixed in multiplayer: everyone holds all keys, multiplayer-only items on, respawn on death.',
 };
 function fillRules() {
@@ -591,7 +590,8 @@ function fillRules() {
   $('rules-use').hidden = !canUse;
   $('rules-use-btn').dataset.want = d.mode === 'solo' ? 'deathmatch' : 'solo';
   $('rules-use-btn').textContent = d.mode === 'solo' ? 'Play alone with the multiplayer rules' : 'Back to the single player rules';
-  $('rule-fixed').textContent = FIXED[mode];
+  $('rule-fixed').textContent = FIXED[mode] || '';
+  $('rule-fixed').hidden = !FIXED[mode];
   for (const el of rulesForm.elements) if (el.id !== 'rules-save') el.disabled = !host;
   // Doom's Nightmare respawns monsters whatever the setting (the box is the
   // -respawn switch for the other difficulties): show it on and locked, keep
