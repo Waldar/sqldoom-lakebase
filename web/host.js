@@ -259,7 +259,11 @@ const musicVol = $('music-vol');
 const savedVol = parseInt(localStorage.getItem('sqldoom.musicVolume')
   ?? (localStorage.getItem('sqldoom.music') === '0' ? '0' : '60'), 10);
 musicVol.value = String(Number.isFinite(savedVol) ? Math.min(100, Math.max(0, savedVol)) : 60);
-const showVol = () => { $('music-vol-wrap').title = parseInt(musicVol.value, 10) ? `Music volume ${musicVol.value} %` : 'Music off (volume 0)'; };
+const showVol = () => {
+  const off = !parseInt(musicVol.value, 10);
+  $('music-vol-wrap').title = off ? 'Music off (volume 0)' : `Music volume ${musicVol.value} %`;
+  $('music-note').classList.toggle('off', off);   // crossed out at volume 0
+};
 showVol();
 const sendMusicVolume = () => game.contentWindow?.postMessage(
   { source: 'sqldoom-host', action: 'music_volume', v: parseInt(musicVol.value, 10) / 100 }, '*');

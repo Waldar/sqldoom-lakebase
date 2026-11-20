@@ -91,6 +91,12 @@
   .pane-quick button[hidden] { display: none; }
   #music-vol-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
   #music-vol-wrap[hidden] { display: none; }
+  /* volume 0, no music: the note crossed out, as a muted speaker (no Unicode
+     character for it; a combining slash renders unevenly across fonts) */
+  #music-note { position: relative; display: inline-block; }
+  #music-note.off { opacity: .55; }
+  #music-note.off::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 1.5px;
+                           background: currentColor; transform: rotate(-45deg); }
   /* not the text fields' look (.controls input: padding, border, background):
      with it the thumb stopped short of both ends (owner, 2026-11-19) */
   #music-vol { width: 90px; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent;
@@ -259,7 +265,7 @@
     <button data-n="auto" title="Aims at 35 frames/s with the fewest connections: one fewer when the game slows down (under 32 tics/s or p75 over 32 ms over 3 s); one more when the connections cannot take every frame slot (pool full over 5%), undone if it does not help; one fewer after 10 s with more than needed">auto</button><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button>
   </div>
   <label class="btn ghost" title="Render every other column (160 instead of 320), doubled in the browser. About 33% faster frames, half the bandwidth."><input type="checkbox" id="low-detail"> Low detail</label>
-  <label class="btn ghost" id="music-vol-wrap" hidden title="Music volume">&#9835; Music <input type="range" id="music-vol" min="0" max="100" step="5" value="60" aria-label="Music volume, 0 for no music"></label>
+  <label class="btn ghost" id="music-vol-wrap" hidden title="Music volume"><span id="music-note">&#9835;</span> Music <input type="range" id="music-vol" min="0" max="100" step="5" value="60" aria-label="Music volume, 0 for no music"></label>
   <label class="btn ghost" title="Run all the time; hold Shift to walk. Off: Shift runs, as in Doom without always run."><input type="checkbox" id="always-run"> Always run</label>
   <button id="fullscreen" class="btn ghost" title="Fullscreen game">&#9974;&nbsp; Fullscreen</button>
 </div>
