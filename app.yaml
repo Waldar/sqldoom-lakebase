@@ -5,7 +5,13 @@ env:
     value: "src"
   # The production branch: the lobby (one row per game) and the menu's default rules.
   - name: LAKEBASE_ENDPOINT
-    value: "projects/sqldoom/branches/production/endpoints/primary"
+    value: "projects/sqldoom-19/branches/production/endpoints/primary"
+  # The Lakebase project (Postgres 19 since 2026-11-20; was projects/sqldoom, Postgres 17):
+  # its game-template branch and every game's branch (sqldoom/lakebase/games.py).
+  - name: LAKEBASE_PROJECT
+    value: "projects/sqldoom-19"
+  - name: DOOM_TEMPLATE_BRANCH
+    value: "game-template"
   - name: LAKEBASE_DB
     value: "databricks_postgres"
   - name: LAKEBASE_SCHEMA
