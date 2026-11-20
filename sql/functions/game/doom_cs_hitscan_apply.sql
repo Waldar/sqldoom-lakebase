@@ -220,6 +220,21 @@ WHERE hh.map_id=doom_cs_hitscan_apply.p_map_id AND hh.player_thing_id=doom_cs_hi
   AND hh.hit_kind='wall'
 ON CONFLICT (map_id,player_thing_id,line_id,trigger_type) DO NOTHING;
 
+-- A_Saw: sfx_sawhit when the blade bites something (2026-11-20; the hits are
+-- gone after this function, so the page's sound loops could not see them).
+-- The loop (api_sound_loops) still plays DSSAWFUL while firing.
+INSERT INTO sound_events
+  (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
+SELECT hh.map_id, 'saw-hit:'||hh.player_thing_id::text||':'||hh.shot_serial::text,
+       ps.level_tics, 'DSSAWHIT', hh.player_thing_id, t.x, t.y
+FROM (SELECT DISTINCT map_id, player_thing_id, shot_serial FROM hitscan_hits
+      WHERE map_id=doom_cs_hitscan_apply.p_map_id AND player_thing_id=doom_cs_hitscan_apply.p_player_thing_id
+        AND shot_serial=doom_cs_hitscan_apply.p_shot_serial AND hit_kind='target' AND damage>0) hh
+JOIN player_weapons pw ON pw.map_id=hh.map_id AND pw.player_thing_id=hh.player_thing_id AND pw.current_weapon=8
+JOIN player_state ps ON ps.map_id=hh.map_id AND ps.player_thing_id=hh.player_thing_id
+JOIN things t ON t.map_id=hh.map_id AND t.id=hh.player_thing_id
+ON CONFLICT (map_id,event_key) DO NOTHING;
+
 DELETE FROM hitscan_hits
 WHERE map_id=doom_cs_hitscan_apply.p_map_id AND player_thing_id=doom_cs_hitscan_apply.p_player_thing_id AND shot_serial=doom_cs_hitscan_apply.p_shot_serial;
 special := false;

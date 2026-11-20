@@ -252,9 +252,17 @@ class Audio {
       if (!wanted.has(key)) { try { chain.src.stop(); } catch (e) { /* already ended */ } this.loops.delete(key); }
     }
     for (const [key, { name, volume, pan }] of wanted) {
-      const chain = this.loops.get(key);
+      let chain = this.loops.get(key);
+      // A loop whose sound changed under the same key starts over with the
+      // new one: the chainsaw is one key, DSSAWIDL held and DSSAWFUL firing,
+      // and only the volume used to follow, so attacking kept the idle sound
+      // (owner, 2026-11-20).
+      if (chain && chain.name !== name) {
+        try { chain.src.stop(); } catch (e) { /* already ended */ }
+        this.loops.delete(key); chain = null;
+      }
       if (chain) chain.gain.gain.value = volume;
-      else { const c = this._chain(name, volume, pan, true); if (c) this.loops.set(key, c); }
+      else { const c = this._chain(name, volume, pan, true); if (c) { c.name = name; this.loops.set(key, c); } }
     }
   }
   stopAll() { for (const [, chain] of this.loops) { try { chain.src.stop(); } catch (e) { /* */ } } this.loops.clear(); }
