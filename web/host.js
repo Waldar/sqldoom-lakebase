@@ -887,6 +887,14 @@ async function quickLoad() {
 }
 $('quick-save').addEventListener('click', () => quickSave());
 $('quick-load').addEventListener('click', () => quickLoad());
+// the same keys as in the game (web/game/app.js) when this page has the
+// focus, e.g. right after a click on one of its buttons
+document.addEventListener('keydown', (e) => {
+  if (e.target === nickEl || !GAME.id || GAME.mode !== 'solo' || e.repeat) return;
+  const save = e.code === 'F6' || (e.altKey && e.code === 'KeyS');
+  const load = e.code === 'F9' || (e.altKey && e.code === 'KeyL');
+  if (save || load) { e.preventDefault(); if (save) quickSave(); else quickLoad(); }
+});
 
 async function startGame(mode, url = null, what = null) {
   $('menu-err').textContent = '';

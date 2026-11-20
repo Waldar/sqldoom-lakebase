@@ -143,11 +143,15 @@ window.addEventListener('keydown', (ev) => {
     return;
   }
   if (ev.repeat) { ev.preventDefault(); return; }
-  // Doom's quick save and quick load keys: the host page does it (single
-  // player only; it ignores them otherwise)
-  if (ev.code === 'F6' || ev.code === 'F9') {
+  // Doom's quick save and quick load keys, F6 and F9, and Option+S / Option+L
+  // (a Mac sends F6 and F9 as media keys without Fn; the game does not use
+  // Option). The host page does it (single player only; it ignores them
+  // otherwise).
+  const qsave = ev.code === 'F6' || (ev.altKey && ev.code === 'KeyS');
+  const qload = ev.code === 'F9' || (ev.altKey && ev.code === 'KeyL');
+  if (qsave || qload) {
     ev.preventDefault();
-    post(ev.code === 'F6' ? 'quicksave' : 'quickload');
+    post(qsave ? 'quicksave' : 'quickload');
     return;
   }
   keys.add(ev.code);

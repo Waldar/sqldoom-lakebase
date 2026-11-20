@@ -82,6 +82,13 @@
                 font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.low-detail .pane-label { max-width: min(642px, var(--pane-fit, 642px)); }
   .pane-label b { color: var(--text); font-weight: 500; }
+  .pane-label { display: flex; align-items: baseline; gap: 12px; }
+  .pane-label > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .pane-quick { flex: none; }
+  .pane-quick button { background: none; border: 0; padding: 0; margin-left: 12px; font: inherit; color: var(--text);
+                       cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .pane-quick button:hover { color: var(--lava); }
+  .pane-quick button[hidden] { display: none; }
   #music-vol-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
   #music-vol-wrap[hidden] { display: none; }
   /* not the text fields' look (.controls input: padding, border, background):
@@ -244,8 +251,6 @@
 
 <div class="controls">
   <input id="nick" maxlength="12" placeholder="your name" autocomplete="nickname" spellcheck="false">
-  <button id="quick-save" class="btn ghost" hidden title="Quick save (F6): a snapshot branch of your game on Lakebase, in about a second. One save per player: it replaces the previous one.">Quick save</button>
-  <button id="quick-load" class="btn ghost" hidden title="Quick load (F9): this game ends, and a new game starts from your quick save, on a new branch made from the snapshot.">Quick load</button>
   <button id="to-menu" class="btn" hidden title="End this game and go back to the title menu. A single-player game is ended and its branch deleted; a multiplayer game goes on for the others.">Quit game</button>
   <span id="join-hint">Your name, as other players see it.</span>
   <span class="spacer"></span>
@@ -263,7 +268,9 @@
 <main class="layout">
   <section>
     <!-- the game (web/game/, embedded) -->
-    <div class="pane-label">frames from <b id="pane-label">Lakebase Primary</b></div>
+    <!-- quick save / load: on this line, not in the controls bar (a second row
+         there made the picture smaller, owner 2026-11-20) -->
+    <div class="pane-label"><span>frames from <b id="pane-label">Lakebase Primary</b></span><span class="pane-quick"><button id="quick-save" type="button" hidden title="Quick save: a snapshot branch of your game on Lakebase, in about a second. One save per player: it replaces the previous one. Keys: F6, or Option+S on a Mac.">Quick save (F6 / &#8997;S)</button><button id="quick-load" type="button" hidden title="Quick load: this game ends, and a new game starts from your quick save, on a new branch made from the snapshot. Keys: F9, or Option+L on a Mac.">Quick load (F9 / &#8997;L)</button></span></div>
     <div class="pane" id="pane">
       <iframe id="game" allow="autoplay; fullscreen"></iframe>
       <div class="doom-screen" id="menu">
