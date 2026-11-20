@@ -1,8 +1,35 @@
-# Next steps (planned 2026-11-18, not started)
+# Next steps (planned 2026-11-18; status 2026-11-20)
+
+## Status
+
+Every step of the plan below has shipped, and both ideas of section 5:
+
+* **0. Frames in flight:** shipped (`1843bd3`, growth rule fixed the next day); with step 3 the rule moved to the app's render threads.
+* **1. Cheat codes:** shipped (`aab9a36`): `api_cheat_key`, single player only, through the relay's allow-list.
+* **2. Music:** shipped (`dcb57bc`), with audio: `src/sqldoom/wad/midi.py` renders with `tinysoundfont` and the TimGM6mb soundfont next to the WAD, as a setup step (`music`) or `tools/render_music.py`; the Music box became a volume slider (`34301a1`).
+* **3. Frames rendered in the app:** shipped (`src/sqldoom/server/frames.py`; details in section 3), frames started on each tic, the camera read from `player_state`. Not done: input on the same socket.
+* **4. Low detail:** generated from the full-detail template by `tools/make_low_detail.py` (`--check` fails when stale); 17-28% faster than full detail (`docs/PERFORMANCE.md`).
+* **5. Ideas:** the "I'M A SHAMELESS CHEATER" list in single player, and "Always run" (on by default, Shift walks).
+
+Also done since (2026-11-20):
+
+* lz4 for the columns every frame decompresses (`cb3b353`, migration `0002`).
+* The app moved to Postgres 19, project `projects/sqldoom-19` (`c48deea`, `a0c8e58`, `dfa66f9`; measurements in `docs/PERFORMANCE.md`). The old Postgres 17 project `projects/sqldoom` is kept as the rollback for a few days.
+* Sounds checked against the Doom source and fixed (`4734a1f`, `609d543`): fist, doors, lifts, switches, use, power-ups, teleporter, bites, chainsaw, the player's own sounds centred, BFG on the charge, landing "oof", stereo width, E1M8's volume floor.
+* Players gib (`ee275c1`, migration `0003`): the killing blow's unclamped health, `DSSLOP` and the gib frames.
+* No fixed-rules notes under the rules form.
+
+Open:
+
+* Input on the frame socket (step 3).
+* The view's dip on a hard landing (`deltaviewheight`); Doom's approximate sound distance (`P_AproxDistance`); the `D_INTER` music between levels.
+* Delete `projects/sqldoom` once Postgres 19 has run for a few days.
+
+The plan as written on 2026-11-18 follows, with the progress notes added while it was done.
 
 State when this was written: `main` at `164e97f`, live on `sqldoom-ltap`. Full-detail frames from LBDoom's 2026-11-17 renderer (~45 ms at the database, 24 CU), 35 frames/s on 2 connections in the owner's browser once `localStorage.doomPipeline` was cleared. Ilia's code: Git folder `/Users/fabien.contaminard@databricks.com/LBDoom-latest` (his `main` `2bb97bd`; clone with the `github-databricks` credential, his GitHub has an IP allow list).
 
-Progress (2026-11-19): 0 shipped (`1843bd3`; growth rule fixed after the owner saw auto still climb to 6, see 0), 1 shipped (`aab9a36`, works), 2 shipped (`dcb57bc`: the Music box is there, no audio yet: the tracks need a General MIDI soundfont on the workspace, then `tools/render_music.py` on game-template and production). 3 and 4 not started; 4 is bigger than planned (below).
+Progress (2026-11-19, superseded by the status above): 0 shipped (`1843bd3`; growth rule fixed after the owner saw auto still climb to 6, see 0), 1 shipped (`aab9a36`, works), 2 shipped (`dcb57bc`: the Music box is there, no audio yet: the tracks need a General MIDI soundfont on the workspace, then `tools/render_music.py` on game-template and production). 3 and 4 not started; 4 is bigger than planned (below).
 
 Order: 0 first (small, and its rule carries over to 3); 1 and 2 are small and independent; 3 is the big one; 4 can come before or after 3 (the frame views do not change with 3).
 
