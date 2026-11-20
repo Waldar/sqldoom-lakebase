@@ -118,6 +118,29 @@ def new_game(request: Request, mode: str = "solo", tab: str = "", name: str = ""
         raise HTTPException(exc.status, str(exc))
 
 
+# Quick save / quick load (2026-11-20), single player, one save per player
+# (sqldoom/lakebase/games.py): declared before /api/games/{game_id}.
+@app.get("/api/games/quicksave")
+def quick_info(request: Request, tab: str = ""):
+    return {"save": GAMES.quick_info(relay.identity_from(request.headers, tab))}
+
+
+@app.post("/api/games/quickload")
+def quickload(request: Request, tab: str = "", name: str = ""):
+    try:
+        return GAMES.quickload(relay.identity_from(request.headers, tab), title=name.strip()[:12])
+    except GameError as exc:
+        raise HTTPException(exc.status, str(exc))
+
+
+@app.post("/api/games/{game_id}/quicksave")
+def quicksave(request: Request, game_id: str, tab: str = ""):
+    try:
+        return GAMES.quicksave(game_id, relay.identity_from(request.headers, tab))
+    except GameError as exc:
+        raise HTTPException(exc.status, str(exc))
+
+
 @app.get("/api/games/mine")
 def my_game(request: Request, tab: str = ""):
     me = relay.identity_from(request.headers, tab)

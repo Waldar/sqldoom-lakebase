@@ -27,6 +27,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
 ```
 
 * A game's branch is created from `game-template` in about 3 s and deleted when the game ends.
+* Quick save and quick load (single player, F6 / F9, one save per player): a save is a child branch of the game's branch, there in about a second, with its compute disabled; a load is a new game branch made from it, the game loop going on from the saved tic.
 * Every browser tab gets its own seat. The app logs every browser in as its service principal, so the player identity is a per-connection setting (`doom.player`: user email from the app's forwarded header plus a per-tab token), read by `doom_caller()`.
 * Frames are SQL views per map and seat (`api_frame_idx_slot<n>_m<map>`, plus `_low` for low detail). The app renders them next to the database on 1 to 4 render threads per player, each with its own connection, and pushes them to the page over one WebSocket (`src/sqldoom/server/frames.py`); the page's own connections, 1 to 4, are the fallback.
 

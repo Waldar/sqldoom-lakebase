@@ -20,6 +20,10 @@ Also done since (2026-11-20):
 * No fixed-rules notes under the rules form.
 * The view dips after a hard landing, as Doom's `P_CalcHeight` (`0195049`, migration `0004`).
 * Input to picture measured in the page (`a18abb9`, migration `0005`): frames stamped with the newest input the game had taken, the first frame drawn with an input timed from its key or button event, in Copy stats. Live: 111-115 ms p50, 131-133 ms p90 (`docs/PERFORMANCE.md`, "Input to picture").
+* A spare single-player branch made ahead (`efb1677`): Postgres 19 has no warm compute pool yet (LKB-19068), so a new branch takes 15-24 s to start; a game takes the spare and is ready in about 1.5 s.
+* Monsters respawn exactly the set time after death when the rule is on, as items; Nightmare without it keeps Doom's own respawn (12 s or more, at random).
+* Single player keeps health, armor, backpack, ammo, weapons and cheats from one level to the next (its exit only; keys and power-ups go, as Doom's `G_PlayerFinishLevel`; migration `0006`).
+* Quick save / quick load (F6 / F9, one save per player) on Lakebase branches (`docs/DEPLOYMENT.md`, "Quick save and quick load").
 
 Dropped (owner, 2026-11-20):
 

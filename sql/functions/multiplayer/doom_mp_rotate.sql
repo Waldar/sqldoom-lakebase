@@ -10,6 +10,26 @@ DECLARE
   _r1 record;
 BEGIN
 
+-- Single player, the level left by its exit (no map asked for, nothing
+-- pending): the player takes the inventory along (mp_carry, migration 0006,
+-- applied in doom_mp_spawn_if_requested). Anything else starts fresh.
+DELETE FROM mp_carry;
+IF EXISTS (SELECT 1 FROM mp_match m WHERE m.mode = 'solo' AND m.pending IS NULL)
+   AND NOT EXISTS (SELECT 1 FROM mp_map_request) THEN
+  INSERT INTO mp_carry (slot, health, armor, armor_class, backpack, ammo_bullets, ammo_shells, ammo_rockets,
+                        ammo_cells, weapons, current_weapon, god_mode, noclip)
+  SELECT mp.slot, ps.health, ps.armor, ps.armor_class, ps.backpack, ps.ammo_bullets, ps.ammo_shells,
+         ps.ammo_rockets, ps.ammo_cells,
+         ARRAY(SELECT o.weapon_id FROM player_weapon_owned o
+               WHERE o.map_id = ps.map_id AND o.player_thing_id = ps.player_thing_id ORDER BY o.weapon_id),
+         -- the weapon being raised, if one was switched to (P_SetupPsprites
+         -- raises the pending one on the next level)
+         COALESCE(pw.pending_weapon, pw.current_weapon, 2), ps.god_mode, ps.noclip
+  FROM mp_match m
+  JOIN mp_players mp ON mp.map_id = m.map_id AND mp.role_name IS NOT NULL
+  JOIN player_state ps ON ps.map_id = mp.map_id AND ps.player_thing_id = mp.player_thing_id AND ps.alive
+  LEFT JOIN player_weapons pw ON pw.map_id = ps.map_id AND pw.player_thing_id = ps.player_thing_id;
+END IF;
 nxt := doom_mp_next_map();
 DELETE FROM mp_map_request;
 PERFORM doom_mp_apply_mode();

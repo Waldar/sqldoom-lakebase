@@ -143,6 +143,13 @@ window.addEventListener('keydown', (ev) => {
     return;
   }
   if (ev.repeat) { ev.preventDefault(); return; }
+  // Doom's quick save and quick load keys: the host page does it (single
+  // player only; it ignores them otherwise)
+  if (ev.code === 'F6' || ev.code === 'F9') {
+    ev.preventDefault();
+    post(ev.code === 'F6' ? 'quicksave' : 'quickload');
+    return;
+  }
   keys.add(ev.code);
   // on the automap too: Doom reads iddt there (AM_Responder)
   if (cheatsOn && sendCheat && /^(Key[A-Z]|Digit[0-9])$/.test(ev.code)) sendCheat(ev.code.slice(-1));

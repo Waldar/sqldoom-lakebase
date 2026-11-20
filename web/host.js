@@ -351,6 +351,12 @@ window.addEventListener('message', (ev) => {
     case 'warp':                     // idclev, single player only
       if (GAME.mode === 'solo' && /^E\dM\d$/.test(m.map || '')) changeMap(m.map);
       break;
+    case 'quicksave':                // F6 in the game
+      quickSave();
+      break;
+    case 'quickload':                // F9 in the game
+      quickLoad();
+      break;
   }
 });
 
@@ -591,16 +597,12 @@ function fillRules() {
   $('rules-use-btn').dataset.want = d.mode === 'solo' ? 'deathmatch' : 'solo';
   $('rules-use-btn').textContent = d.mode === 'solo' ? 'Play alone with the multiplayer rules' : 'Back to the single player rules';
   for (const el of rulesForm.elements) if (el.id !== 'rules-save') el.disabled = !host;
-  // Doom's Nightmare respawns monsters whatever the setting (the box is the
-  // -respawn switch for the other difficulties): show it on and locked, keep
-  // the saved choice for when the difficulty goes back down.
+  // On: a corpse comes back exactly the set time after it fell, as items
+  // (2026-11-20). Off: none, except on Nightmare, which respawns monsters its
+  // own way (Doom's P_NightmareRespawn: 12 s or more, at random), as the note
+  // says. (Until 2026-11-20 the box was locked on with Nightmare.)
   const nm = +rulesForm.elements.skill.value === 4, mr = rulesForm.elements.monster_respawn;
-  if (nm) {
-    if (!('saved' in mr.dataset)) mr.dataset.saved = mr.checked ? '1' : '0';
-    mr.checked = true; mr.disabled = true;
-  } else if ('saved' in mr.dataset) {
-    mr.checked = mr.dataset.saved === '1'; delete mr.dataset.saved;
-  }
+  if ('saved' in mr.dataset) { mr.checked = mr.dataset.saved === '1'; delete mr.dataset.saved; }
   $('mrespawn-forced').hidden = !nm;
   $('rules-save').disabled = !host || !rules.dirty;
   $('rules-save').classList.toggle('dirty', host && rules.dirty);
@@ -761,6 +763,7 @@ async function showMenu(err = '') {
   loadEl.hidden = true;
   menuEl.hidden = false;
   $('to-menu').hidden = true;
+  $('quick-save').hidden = true; $('quick-load').hidden = true;
   $('menu-err').textContent = err;
   await mainMenu();
   status('Choose a game.');
@@ -792,6 +795,8 @@ async function mainMenu() {
   const entries = [];
   if (r.game) entries.push({ label: 'Resume game', act: 'solo', sub: `your single-player game, ${r.game.state}, started ${Math.round(r.game.age_s / 60)} min ago` });
   entries.push({ label: 'Single player', act: 'solo', sub: off || 'your own world: a new Lakebase branch', disabled: !!off });
+  const q = !off && await quickInfo();
+  if (q) entries.push({ label: 'Quick load', act: 'quickload', sub: `your quick save on ${q.map}, ${ago(q.age_s)}: a new branch from its snapshot` });
   entries.push({ label: 'Multiplayer', act: 'multi-menu', sub: off || 'host a game or join one, up to 4 players', disabled: !!off });
   if (menuLevel === 'main') renderMenu(entries);
 }
@@ -821,6 +826,8 @@ function startEmbed(src, label) {
   menuEl.hidden = true;
   loadEl.hidden = true;
   $('to-menu').hidden = false;
+  $('quick-save').hidden = GAME.mode !== 'solo';
+  $('quick-load').hidden = GAME.mode !== 'solo';
   wantPlay = true;                    // the embed joins as soon as it is ready
   game.src = src;
   $('pane-label').textContent = label;
@@ -839,13 +846,55 @@ function showLoading(g, t0) {
   $('loading-bar').style.width = `${pct}%`;
   $('loading-time').textContent = `${secs.toFixed(0)} s${g.step ? ` \u00b7 ${g.step}` : ''}`;
 }
-async function startGame(mode) {
+// Quick save / quick load (2026-11-20; sqldoom/lakebase/games.py): single
+// player, one save per player. A save is a snapshot branch of the game's
+// branch (about a second); a load ends this game and starts one from it.
+async function quickInfo() {
+  try { return (await (await fetch(`/api/games/quicksave?tab=${hostTab()}`)).json()).save; } catch (e) { return null; }
+}
+function ago(s) {
+  return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+}
+let quickBusy = false;
+async function quickSave() {
+  if (!GAME.id || GAME.mode !== 'solo' || quickBusy) return;
+  quickBusy = true;
+  status('Quick save: snapshotting your game\u2019s branch\u2026');
+  try {
+    const r = await fetch(`/api/games/${GAME.id}/quicksave?tab=${hostTab()}`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    status(`Quick saved on ${j.map}: branch ${j.branch}, a snapshot of your game, in ${j.took_s} s.`);
+  } catch (e) {
+    status(`Quick save: ${e.message}`, true);
+  } finally {
+    quickBusy = false;
+  }
+}
+async function quickLoad() {
+  if (quickBusy) return;
+  const q = await quickInfo();
+  if (!q) { status('Quick load: no quick save yet (F6 or Quick save while playing).', true); return; }
+  if (GAME.id && GAME.mode !== 'solo') return;
+  quickBusy = true;
+  try {
+    if (GAME.id) await showMenu();         // this game ends: the app ends it on the load
+    await startGame('solo', `/api/games/quickload?tab=${hostTab()}`,
+      `Loading your quick save on ${q.map} on a new branch made from its snapshot\u2026`);
+  } finally {
+    quickBusy = false;
+  }
+}
+$('quick-save').addEventListener('click', () => quickSave());
+$('quick-load').addEventListener('click', () => quickLoad());
+
+async function startGame(mode, url = null, what = null) {
   $('menu-err').textContent = '';
   clearInterval(openTimer);
   let g;
   try {
     const nick = encodeURIComponent(nickEl.value.trim().slice(0, 12));
-    const r = await fetch(`/api/games?mode=${mode}&tab=${hostTab()}&name=${nick}`, { method: 'POST' });
+    const r = await fetch(url ? `${url}&name=${nick}` : `/api/games?mode=${mode}&tab=${hostTab()}&name=${nick}`, { method: 'POST' });
     g = await r.json();
     if (!r.ok) throw new Error(g.detail || `HTTP ${r.status}`);
   } catch (e) {
@@ -858,7 +907,7 @@ async function startGame(mode) {
   $('loading-back').hidden = true;
   const id = g.game_id, t0 = performance.now();
   loadingFor = id;
-  status('Creating your world on its own Lakebase branch\u2026');
+  status(what || 'Creating your world on its own Lakebase branch\u2026');
   while (loadingFor === id) {
     showLoading(g, t0);
     if (g.state === 'ready') break;
@@ -936,6 +985,7 @@ function gameLabel(g, mode) {
 }
 function chooseMenu(act, arg) {
   if (act === 'solo' || act === 'multi') startGame(act);
+  else if (act === 'quickload') quickLoad();
   else if (act === 'join') joinGame(arg);
   else if (act === 'main-menu') mainMenu();
   else if (act === 'multi-menu') {

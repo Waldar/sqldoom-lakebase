@@ -156,6 +156,12 @@ Everything the game runs in Postgres is a plain file under `sql/`, installed by 
 
 **To change the SQL:** edit the file and deploy (new games get it; running games keep theirs). A change to a table is a new migration, never an edit of an applied one. To try a change first: create a branch from `game-template`, run `sqldoom.db.install` on it (from a notebook, as in step 5), play or bench it there (`tools/bench.py`), delete the branch.
 
+## Quick save and quick load (branches)
+
+Single player, one save per player (`lobby.saves`; `sqldoom/lakebase/games.py`). A save is a child branch `s-<id>` of the game's branch, made with no expiry; its compute is disabled at once, so a save costs storage only. A load is a new game branch `g-<id>` made from the save; the game loop starts with `DOOM_CONTINUE=1` and goes on from the saved tic (no fresh level), and the seat is handed to the loading tab. A save made before a deploy that changed the game's SQL is brought up to date on load (`sqldoom.db.install`).
+
+Lakebase's rules shape the rest: a branch with an expiry cannot have children, so a game's branch loses its 6 h expiry at its first save; a branch with children cannot be deleted, and a read-write compute cannot be deleted. So when a game ends, or a save is replaced, a branch that still has children is kept in `lobby.retired` with its compute disabled; the reaper deletes it once its children are gone, leaves first (every 10 min, with the orphan sweep).
+
 ## Configuration (`app.yaml`)
 
 | Variable | Default | Meaning |
@@ -193,4 +199,4 @@ Everything the game runs in Postgres is a plain file under `sql/`, installed by 
 | `No module named sqldoom` at the app's start | The Git source code path is not the repository root, or `app.yaml` lost its `PYTHONPATH=src` |
 | All browsers share one player | The relay sets `doom.player` per tab; check that the page is served by this app |
 | Tic over budget on big maps | Expected in big fights on E1M6/E1M9 (120-180 monsters); see `docs/PERFORMANCE.md`. Auto frames in flight then gives frames back |
-| Monsters respawn although respawn is off | On Nightmare, Doom always respawns monsters; the Rules card shows it locked on |
+| Monsters respawn although respawn is off | On Nightmare, Doom always respawns monsters (12 s or more after death, at random); with the rule on, they come back exactly the set time after death, as items |

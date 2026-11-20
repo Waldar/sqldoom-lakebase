@@ -56,6 +56,12 @@ INTERMISSION_SECONDS = float(os.getenv("INTERMISSION_SECONDS", 10))
 # How long one player may keep a seat while others are waiting in the lobby
 # (0: forever). Nobody is asked to leave an empty room.
 HOLD_SECONDS = int(float(os.getenv("HOLD_MINUTES", 15)) * 60)
+# DOOM_CONTINUE=1 (a quick load, sqldoom/lakebase/games.py, 2026-11-20): the
+# branch holds a game in play (a copy of a saved one); go on from it as it
+# is, on its own map and skill, instead of opening a fresh match: no
+# doom_mp_configure, no doom_mp_start, no warm-up tics that seat and free
+# every slot. The seats keep their players.
+CONTINUE = os.getenv("DOOM_CONTINUE", "") == "1"
 MATCH_KEY = 0
 STOPPING = False
 
@@ -90,9 +96,22 @@ def main():
         raise SystemExit("another referee is running the match (heartbeat within 3 s); "
                          " Stop it first, or wait 3 s if it just died.")
     cur.execute("DELETE FROM mp_inputs")
-    cur.execute("SELECT doom_mp_configure(%s,%s,%s,%s,%s,%s,%s)",
-                (MAP_ID, SKILL, TIMER_TICS, ALTDEATH, MONSTERS, RESPAWN_MONSTERS,
-                 int(INTERMISSION_SECONDS * 35)))
+    global MAP_ID, SKILL
+    if CONTINUE:
+        cur.execute("SELECT map_id, skill FROM mp_match LIMIT 1")
+        row = cur.fetchone()
+        if row is None:
+            raise SystemExit("DOOM_CONTINUE: no match on this branch to go on with")
+        MAP_ID, SKILL = int(row[0]), int(row[1])
+        # closed until doom_mp_open, as a fresh match (no client writes meanwhile)
+        cur.execute("UPDATE mp_match SET state = 'intermission', intermission_until = now()")
+        # the seats' players are on their way back: as a fresh claim, 30 s
+        # before the reaper may take a seat
+        cur.execute("UPDATE mp_players SET last_seen = now() + interval '30 seconds' WHERE role_name IS NOT NULL")
+    else:
+        cur.execute("SELECT doom_mp_configure(%s,%s,%s,%s,%s,%s,%s)",
+                    (MAP_ID, SKILL, TIMER_TICS, ALTDEATH, MONSTERS, RESPAWN_MONSTERS,
+                     int(INTERMISSION_SECONDS * 35)))
     cur.execute("UPDATE mp_match SET hold_seconds = %s", (HOLD_SECONDS,))
     cur.execute("SELECT name FROM maps")
     loaded = {row[0] for row in cur.fetchall()}
@@ -117,7 +136,7 @@ def main():
     # race is simply tried again.
     for attempt in range(30):
         try:
-            players = sql.mp_start(cur, MAP_ID, SKILL)
+            players = sql.mp_players(cur, MAP_ID) if CONTINUE else sql.mp_start(cur, MAP_ID, SKILL)
             if not {1, 2} <= set(players):
                 raise SystemExit(f"map {MAP_ID} has no player 1 and player 2 starts")
             cur.execute("SELECT map_id FROM maps WHERE name = ANY(%s) OR map_id = %s ORDER BY map_id",
@@ -133,10 +152,10 @@ def main():
 
     log(f"[server] deathmatch on map {MAP_ID}, skill {SKILL}: "
         + ", ".join(f"slot {slot} = thing {thing}" for slot, thing in sorted(players.items()))
-        + "; all free")
+        + ("; going on from a saved game, the seats kept" if CONTINUE else "; all free"))
     log("[server] compiling the tic (the first one takes a few seconds)...")
     started = time.perf_counter()
-    for attempt in range(30):
+    for attempt in range(0 if CONTINUE else 30):    # a continued game: no warm-up tics
         try:
             sql.mp_tic(cur, MAP_ID, SKILL, players)
             # Warm the join path too

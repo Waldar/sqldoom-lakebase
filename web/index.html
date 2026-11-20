@@ -244,6 +244,8 @@
 
 <div class="controls">
   <input id="nick" maxlength="12" placeholder="your name" autocomplete="nickname" spellcheck="false">
+  <button id="quick-save" class="btn ghost" hidden title="Quick save (F6): a snapshot branch of your game on Lakebase, in about a second. One save per player: it replaces the previous one.">Quick save</button>
+  <button id="quick-load" class="btn ghost" hidden title="Quick load (F9): this game ends, and a new game starts from your quick save, on a new branch made from the snapshot.">Quick load</button>
   <button id="to-menu" class="btn" hidden title="End this game and go back to the title menu. A single-player game is ended and its branch deleted; a multiplayer game goes on for the others.">Quit game</button>
   <span id="join-hint">Your name, as other players see it.</span>
   <span class="spacer"></span>
@@ -363,9 +365,9 @@
         <form id="rules-form" autocomplete="off">
           <label class="rule"><span>Monsters<sup>*</sup></span><input type="checkbox" name="monsters"></label>
           <label class="rule" id="rule-skill"><span>Difficulty<sup>*</sup></span><select name="skill" class="small-btn"></select></label>
-          <div class="rule" id="rule-mrespawn" title="Doom's Nightmare respawn: a corpse can come back once this long has passed (then a random roll every 32 tics). Nightmare difficulty always respawns.">
+          <div class="rule" id="rule-mrespawn" title="A dead monster comes back at its start exactly this long after it fell, as items do (not while something stands on the spot). Off, Nightmare still respawns monsters its own way, as in Doom: 12 s or more after death, at random.">
             <span>Monsters respawn</span>
-            <span><input type="checkbox" name="monster_respawn"> after <input type="number" name="monster_respawn_s" min="1" max="600"> s <small id="mrespawn-forced" hidden style="opacity:.7">(always on with Nightmare)</small></span>
+            <span><input type="checkbox" name="monster_respawn"> after <input type="number" name="monster_respawn_s" min="1" max="600"> s <small id="mrespawn-forced" hidden style="opacity:.7">(off: Nightmare's own, 12 s or more)</small></span>
           </div>
           <div class="rule" title="A picked-up item comes back after this long (Doom's deathmatch 2.0: 30 s).">
             <span>Items respawn</span>

@@ -60,6 +60,16 @@ GAME_TTL_S = int(os.getenv("DOOM_GAME_TTL_S", str(6 * 3600)))
 IDLE_END_S = int(os.getenv("DOOM_GAME_IDLE_S", "180"))
 PREWARM_CONNS = int(os.getenv("DOOM_PREWARM_CONNS", "16"))
 BRANCH_PREFIX = "g-"
+# Quick save / quick load (2026-11-20), single player, one save per player:
+# a save is a child branch s-<id> of the game's branch (Lakebase copy on
+# write, there in ~1 s), its compute disabled (storage only); a load is a new
+# game branch made from it, the game loop going on from the saved tic
+# (DOOM_CONTINUE). Lakebase rules (tested 2026-11-20): a branch with an
+# expiry cannot have children (a game's branch loses its 6 h expiry at its
+# first save), a branch with children cannot be deleted and a read-write
+# compute cannot be deleted (such a branch is kept in lobby.retired with its
+# compute disabled, and deleted once its children are gone).
+SAVE_PREFIX = "s-"
 # A spare single-player branch, made and warmed ahead (2026-11-20): on
 # Postgres 19 a new branch's compute takes 15-24 s to start (Postgres 17:
 # 2.6-2.8 s), most of a game's 21-27 s to ready. A solo game takes the spare
@@ -109,7 +119,25 @@ CREATE TABLE IF NOT EXISTS lobby.template (
     id           boolean PRIMARY KEY DEFAULT true CHECK (id),
     version      text NOT NULL,
     refreshed_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS lobby.saves (
+    owner      text PRIMARY KEY,      -- the player (user, without the tab): one quick save each
+    branch     text NOT NULL,         -- s-<id>, a child of the game's branch
+    game_id    text NOT NULL,
+    identity   text NOT NULL,         -- the seat's holder in the save (user#tab)
+    map_name   text,
+    skill      integer,
+    code       text NOT NULL,         -- code_version() of the game's SQL at the save
+    created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS lobby.retired (
+    branch     text PRIMARY KEY,      -- deleted once it has no children (a save, a loaded game)
+    why        text,
+    since      timestamptz NOT NULL DEFAULT now());
 """
+
+
+def user_of(identity):
+    """The player without the tab: a quick save is the player's, any tab."""
+    return (identity or "").split("#", 1)[0]
 
 
 class GameError(Exception):
@@ -143,6 +171,8 @@ class Game:
         self.seen_saved = 0.0
         self.metrics = Metrics()
         self.referee = None
+        self.load = None                     # quick load: the lobby.saves row it starts from
+        self.no_expiry = False               # the branch lost its expiry (a first quick save)
 
     def public(self):
         return {"game_id": self.game_id, "mode": self.mode, "state": self.state, "step": self.step,
@@ -172,6 +202,7 @@ class GameManager:
         self._spare_idle = threading.Event()  # set while no spare is being made
         self._spare_idle.set()
         self._keep = set()                   # branches the orphan sweep leaves alone (a spare)
+        self._save_lock = threading.Lock()   # one quick save or load at a time
         self._last_demand = time.time()      # the last game asked for (the app start counts)
 
     # ------------------------------------------------------------ plumbing
@@ -434,6 +465,9 @@ class GameManager:
                 while not self._template_ready.wait(2.0):
                     if self.template_state.startswith("failed") or self._stop.is_set():
                         raise RuntimeError(f"template not available: {self.template_state}")
+            if g.load:
+                self._provision_load(g, P, Duration, FieldMask)
+                return
             spare = self._take_spare() if g.mode == "solo" else None
             if spare:
                 # the lobby row names the spare's branch first, so the orphan
@@ -462,6 +496,169 @@ class GameManager:
             self._finish(g, "failed", str(exc)[:500])
         finally:
             self._keep.discard(g.branch)
+
+    def _provision_load(self, g, P, Duration, FieldMask):
+        """A quick load: the game's branch from the save's, the save's code
+        brought up to date if it is older, the seat handed to the loading tab,
+        then the game loop going on from the saved tic."""
+        s = g.load
+        self._save(g, step="loading your quick save")
+        t0 = time.time()
+        w = self._w()
+        self._create_branch_sized(w, g, P, Duration, FieldMask, source=s["branch"])
+        ep = self._sized_endpoint(w, g, P, FieldMask)
+        self._save(g, state="warming", step="loading the level", endpoint=ep.name)
+        self._read_cu(g)
+        blocks = self._prewarm(ep.name)
+        conn = psycopg2.connect(self.creds.dsn(ep.name, application_name="sqldoom-lobby",
+                                               role=os.getenv("DOOM_DB_ROLE") or None))
+        try:
+            conn.autocommit = True
+            if s["code"] != code_version():
+                # saved before a deploy that changed the game's SQL: install it
+                # (migrations then code, as on the template; the game state stays)
+                self._save(g, step="updating the saved game's code")
+                db.install(conn)
+                print(f"[games] {g.game_id}: saved code {s['code']} brought to {code_version()}", flush=True)
+            with conn.cursor() as cur:
+                cur.execute("UPDATE doom.mp_players SET role_name = %s, last_seen = now() + interval '30 seconds' "
+                            "WHERE role_name = %s", (g.owner, s["identity"]))
+                cur.execute("DELETE FROM doom.mp_waiting")
+                cur.execute("UPDATE doom.player_state ps SET message = 'GAME LOADED.', message_tics = 140 "
+                            "FROM doom.mp_players mp WHERE mp.role_name = %s AND ps.map_id = mp.map_id "
+                            "AND ps.player_thing_id = mp.player_thing_id", (g.owner,))
+        finally:
+            conn.close()
+        print(f"[games] {g.game_id}: quick save {s['branch']} ({s['map_name']}) loaded, "
+              f"branch + {blocks} blocks warm in {time.time() - t0:.1f} s", flush=True)
+        self._save(g, state="starting", step="starting the game")
+        self._start_referee(g, {"DOOM_CONTINUE": "1"})
+
+    # ---------------------------------------------------------- quick save
+    def quick_info(self, identity):
+        """The player's quick save, for the page: map, skill, how old."""
+        rows = self._lobby("SELECT map_name, skill, EXTRACT(EPOCH FROM now() - created_at)::float, branch "
+                           "FROM lobby.saves WHERE owner = %s", (user_of(identity),), fetch=True)
+        if not rows:
+            return None
+        m, sk, age, branch = rows[0]
+        return {"map": m, "skill": sk, "age_s": round(age), "branch": branch}
+
+    def quicksave(self, game_id, identity):
+        """A snapshot branch of the game, now. Replaces the player's previous
+        quick save. Single player, while playing and alive."""
+        from databricks.sdk.service import postgres as P
+        from databricks.sdk.service.postgres import FieldMask
+        g = self.game(game_id)
+        if g is None:
+            raise GameError(404, "no such game")
+        if g.mode != "solo" or g.owner != identity:
+            raise GameError(403, "quick save is for your own single-player game")
+        if g.state != "ready" or not g.endpoint:
+            raise GameError(409, "the game is not running yet")
+        if not self._save_lock.acquire(timeout=30):
+            raise GameError(429, "a quick save or load is under way")
+        try:
+            t0 = time.time()
+            conn = psycopg2.connect(self.creds.dsn(g.endpoint, application_name="sqldoom-lobby",
+                                                   role=os.getenv("DOOM_DB_ROLE") or None))
+            try:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT m.state::text, m.pending, ps.alive, ma.name, m.skill "
+                                "FROM doom.mp_match m JOIN doom.maps ma ON ma.map_id = m.map_id "
+                                "JOIN doom.mp_players mp ON mp.map_id = m.map_id AND mp.role_name = %s "
+                                "JOIN doom.player_state ps ON ps.map_id = mp.map_id AND ps.player_thing_id = mp.player_thing_id",
+                                (identity,))
+                    row = cur.fetchone()
+                    if row is None or row[0] != "playing" or row[1] is not None:
+                        raise GameError(409, "not now: only while playing (not between levels)")
+                    if not row[2]:
+                        raise GameError(409, "not now: you are dead")
+                    map_name, skill = row[3], int(row[4])
+                    w = self._w()
+                    if not g.no_expiry:
+                        # a branch with an expiry cannot have children
+                        name = self._branch_name(g.branch)
+                        w.postgres.update_branch(name=name, branch=P.Branch(name=name, spec=P.BranchSpec(no_expiry=True)),
+                                                 update_mask=FieldMask(field_mask=["spec.no_expiry"])).wait()
+                        g.no_expiry = True
+                    sid = f"{SAVE_PREFIX}{uuid.uuid4().hex[:8]}"
+                    # the snapshot is taken now (the branch's LSN); its compute
+                    # is not waited for: it is disabled below
+                    w.postgres.create_branch(parent=PROJECT, branch_id=sid, branch=P.Branch(spec=P.BranchSpec(
+                        source_branch=self._branch_name(g.branch), no_expiry=True)))
+                    for _ in range(120):
+                        try:
+                            w.postgres.get_branch(name=self._branch_name(sid))
+                            break
+                        except Exception:
+                            time.sleep(0.25)
+                    else:
+                        raise GameError(504, "the save branch did not appear")
+                    took = time.time() - t0
+                    cur.execute("UPDATE doom.player_state ps SET message = 'GAME SAVED.', message_tics = 140 "
+                                "FROM doom.mp_players mp WHERE mp.role_name = %s AND ps.map_id = mp.map_id "
+                                "AND ps.player_thing_id = mp.player_thing_id", (identity,))
+            finally:
+                conn.close()
+            old = self._lobby("SELECT branch FROM lobby.saves WHERE owner = %s", (user_of(identity),), fetch=True)
+            self._lobby("INSERT INTO lobby.saves (owner, branch, game_id, identity, map_name, skill, code) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (owner) DO UPDATE SET branch = EXCLUDED.branch, "
+                        "game_id = EXCLUDED.game_id, identity = EXCLUDED.identity, map_name = EXCLUDED.map_name, "
+                        "skill = EXCLUDED.skill, code = EXCLUDED.code, created_at = now()",
+                        (user_of(identity), sid, g.game_id, identity, map_name, skill, code_version()))
+            self._spawn(self._disable_compute, sid, name=f"save-{sid}")
+            if old and old[0][0] != sid:
+                self._spawn(self._delete_branch, old[0][0], name=f"unsave-{old[0][0]}")
+            print(f"[games] {g.game_id}: quick save {sid} on {map_name} in {took:.1f} s", flush=True)
+            return {"branch": sid, "map": map_name, "skill": skill, "took_s": round(took, 1)}
+        finally:
+            self._save_lock.release()
+
+    def quickload(self, identity, title=""):
+        """A new single-player game from the player's quick save; the tab's
+        current single-player game ends."""
+        if not identity:
+            raise GameError(401, "no player identity")
+        if not self.leader:
+            raise GameError(503, "the game service is starting, try again in a few seconds")
+        rows = self._lobby("SELECT branch, identity, map_name, skill, code FROM lobby.saves WHERE owner = %s",
+                           (user_of(identity),), fetch=True)
+        if not rows:
+            raise GameError(404, "no quick save yet")
+        save = dict(zip(("branch", "identity", "map_name", "skill", "code"), rows[0]))
+        with self._lock:
+            current = [g for g in self._games.values() if g.owner == identity and g.mode == "solo" and g.state in LIVE]
+        for g in current:
+            self._finish(g, "ended", "quick load")
+        with self._lock:
+            if sum(g.state in LIVE for g in self._games.values()) >= MAX_GAMES:
+                raise GameError(429, f"{MAX_GAMES} games are running, try again later")
+            game_id = uuid.uuid4().hex[:8]
+            g = Game(game_id, "solo", identity, f"{BRANCH_PREFIX}{game_id}", CU["solo"], title=(title or "")[:12])
+            g.load = save
+            self._games[game_id] = g
+        self._lobby("INSERT INTO lobby.games (game_id, mode, owner, branch, cu, state) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (g.game_id, "solo", identity, g.branch, g.cu, g.state))
+        self._spawn(self._provision, g, name=f"game-{game_id}")
+        return g.public()
+
+    def _disable_compute(self, branch_id):
+        """A save or a retired branch keeps its storage, not a running compute
+        (a read-write compute cannot be deleted; disabled, it stops)."""
+        from databricks.sdk.service import postgres as P
+        from databricks.sdk.service.postgres import FieldMask
+        try:
+            w = self._w()
+            for e in w.postgres.list_endpoints(parent=self._branch_name(branch_id)):
+                if e.status and e.status.disabled:
+                    continue
+                w.postgres.update_endpoint(name=e.name, endpoint=P.Endpoint(name=e.name, spec=P.EndpointSpec(
+                    endpoint_type=P.EndpointType.ENDPOINT_TYPE_READ_WRITE, disabled=True)),
+                    update_mask=FieldMask(field_mask=["spec.disabled"])).wait()
+        except Exception as exc:
+            print(f"[games] branch {branch_id}: compute not disabled: {exc}", flush=True)
 
     def _sized_endpoint(self, w, g, P, FieldMask):
         """The branch's endpoint, resized to g.cu if it was born at another size."""
@@ -563,7 +760,7 @@ class GameManager:
 
     _create_lock = threading.Lock()
 
-    def _create_branch_sized(self, w, g, P, Duration, FieldMask):
+    def _create_branch_sized(self, w, g, P, Duration, FieldMask, source=None):
         """Create the game's branch with its endpoint already at g.cu. A new
         branch's endpoint takes the project's default size; resizing it after
         restarts the compute (measured 2026-11-11: 17.8 s, 21.6 s to a warm
@@ -578,7 +775,7 @@ class GameManager:
 
         def create():
             w.postgres.create_branch(parent=PROJECT, branch_id=g.branch, branch=P.Branch(spec=P.BranchSpec(
-                source_branch=self._branch_name(TEMPLATE), ttl=Duration(seconds=GAME_TTL_S)))).wait()
+                source_branch=self._branch_name(source or TEMPLATE), ttl=Duration(seconds=GAME_TTL_S)))).wait()
 
         with self._create_lock:
             d = w.postgres.get_project(name=PROJECT).status.default_endpoint_settings
@@ -844,12 +1041,29 @@ class GameManager:
         print(f"[games] {g.game_id}: {state} ({why})", flush=True)
 
     def _delete_branch(self, branch_id):
-        if not branch_id.startswith(BRANCH_PREFIX):
-            return                                  # never anything but a game branch
+        """Delete a game or save branch. One with children (a quick save, a
+        game loaded from one) cannot be: it is kept in lobby.retired with its
+        compute disabled, and the reaper deletes it once they are gone."""
+        if not branch_id.startswith((BRANCH_PREFIX, SAVE_PREFIX)):
+            return False                            # never anything but a game or save branch
         try:
             self._w().postgres.delete_branch(name=self._branch_name(branch_id))
         except Exception as exc:
-            print(f"[games] branch {branch_id} not deleted: {exc}", flush=True)
+            text = str(exc)
+            if "children" in text:
+                first = self._lobby("INSERT INTO lobby.retired (branch, why) VALUES (%s, %s) "
+                                    "ON CONFLICT DO NOTHING RETURNING branch",
+                                    (branch_id, "has child branches"), fetch=True)
+                if first:
+                    print(f"[games] branch {branch_id} kept until its child branches go (compute disabled)", flush=True)
+                    # in the background: disabling waits for the compute (~18 s)
+                    self._spawn(self._disable_compute, branch_id, name=f"retire-{branch_id}")
+                return False
+            if "not found" not in text.lower() and "NOT_FOUND" not in text:
+                print(f"[games] branch {branch_id} not deleted: {exc}", flush=True)
+                return False
+        self._lobby("DELETE FROM lobby.retired WHERE branch = %s", (branch_id,))
+        return True
 
     # -------------------------------------------------------------- reaper
     def _reaper(self):
@@ -870,14 +1084,29 @@ class GameManager:
             if now - last_orphans > 600:
                 last_orphans = now
                 try:
-                    live = {r[0] for r in self._lobby("SELECT branch FROM lobby.games WHERE ended_at IS NULL", fetch=True)}
-                    for b in self._w().postgres.list_branches(parent=PROJECT):
-                        bid = b.name.rsplit("/", 1)[-1]
-                        if bid.startswith(BRANCH_PREFIX) and bid not in live and bid not in self._keep:
-                            print(f"[games] orphan branch {bid}: deleting", flush=True)
-                            self._delete_branch(bid)
+                    self._sweep_branches()
                 except Exception as exc:
                     print(f"[games] orphan sweep failed: {exc}", flush=True)
+
+    def _sweep_branches(self):
+        """Orphan g-* and s-* branches (no live game, no quick save) deleted;
+        the ones kept for their children (lobby.retired) deleted once those
+        are gone, leaves first, so a chain goes in one pass."""
+        live = {r[0] for r in self._lobby("SELECT branch FROM lobby.games WHERE ended_at IS NULL", fetch=True)}
+        saves = {r[0] for r in self._lobby("SELECT branch FROM lobby.saves", fetch=True)}
+        retired = {r[0] for r in self._lobby("SELECT branch FROM lobby.retired", fetch=True)}
+        for b in self._w().postgres.list_branches(parent=PROJECT):
+            bid = b.name.rsplit("/", 1)[-1]
+            orphan = ((bid.startswith(BRANCH_PREFIX) and bid not in live)
+                      or (bid.startswith(SAVE_PREFIX) and bid not in saves))
+            if orphan and bid not in self._keep and bid not in retired:
+                print(f"[games] orphan branch {bid}: deleting", flush=True)
+                self._delete_branch(bid)
+        for _ in range(len(retired) + 1):
+            left = [r[0] for r in self._lobby("SELECT branch FROM lobby.retired ORDER BY since DESC", fetch=True)
+                    if r[0] not in saves]
+            if not left or not any([self._delete_branch(bid) for bid in left]):
+                break
 
     def snapshot(self):
         with self._lock:

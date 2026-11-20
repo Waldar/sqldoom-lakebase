@@ -22,10 +22,16 @@ JOIN player_state ps ON ps.map_id=ai.map_id
 WHERE ai.map_id=doom_cs_monster_deaths.p_map_id::int AND ai.state='dead'
 ON CONFLICT (map_id,thing_id) DO NOTHING;
 
--- choose this tic's P_NightmareRespawn set
--- movecount >= 12*TICRATE, then a check only on every 32nd tic, then
--- P_Random() <= 4 -- five values in 256, rolled per corpse. Staged into a
--- table because the statements below all have to agree on the same set.
+-- choose this tic's respawn set. Staged into a table because the statements
+-- below all have to agree on the same set.
+-- * The "monsters respawn" rule (mp_match.respawn_monsters, the menu's
+--   seconds in MONSTER_RESPAWN_TICS): exactly that long after the corpse
+--   settled, as items (owner, 2026-11-20; it was Doom's roll below after the
+--   rule's time, so a corpse came back 1-70 s late).
+-- * Nightmare without the rule: Doom's P_NightmareRespawn: movecount >=
+--   12*TICRATE, then a check only on every 32nd tic, then P_Random() <= 4 --
+--   five values in 256, rolled per corpse.
+-- Either way not while something else stands on the spot (P_CheckPosition).
 DELETE FROM monster_respawns WHERE map_id=doom_cs_monster_deaths.p_map_id::int;
 
 INSERT INTO monster_respawns (map_id,thing_id,old_x,old_y)
@@ -35,14 +41,17 @@ JOIN things t ON t.map_id=md.map_id AND t.id=md.thing_id
 JOIN player_state ps ON ps.map_id=md.map_id
   AND ps.player_thing_id=doom_cs_monster_deaths.p_player_thing_id::int
 WHERE md.map_id=doom_cs_monster_deaths.p_map_id::int
-  AND ((SELECT g.skill FROM game_tic_commands g
-             WHERE g.map_id=doom_cs_monster_deaths.p_map_id::int
-               AND g.player_thing_id=doom_cs_monster_deaths.p_player_thing_id::int)=4
-       -- -respawn: the same rule on any skill
-       OR EXISTS (SELECT 1 FROM mp_match m WHERE m.map_id=doom_cs_monster_deaths.p_map_id::int AND m.respawn_monsters))
-  AND ps.level_tics - md.death_tic >= _cs.monster_respawn_tics
-  AND (ps.level_tics & 31) = 0
-  AND doom_prandom(md.thing_id, ps.level_tics, 40) <= 4
+  AND CASE
+        WHEN EXISTS (SELECT 1 FROM mp_match m WHERE m.map_id=doom_cs_monster_deaths.p_map_id::int AND m.respawn_monsters)
+          THEN ps.level_tics - md.death_tic >= _cs.monster_respawn_tics
+        WHEN (SELECT g.skill FROM game_tic_commands g
+               WHERE g.map_id=doom_cs_monster_deaths.p_map_id::int
+                 AND g.player_thing_id=doom_cs_monster_deaths.p_player_thing_id::int)=4
+          THEN ps.level_tics - md.death_tic >= 12 * 35
+               AND (ps.level_tics & 31) = 0
+               AND doom_prandom(md.thing_id, ps.level_tics, 40) <= 4
+        ELSE false
+      END
   -- P_CheckPosition: no respawn while something else is standing on the spot.
   AND NOT EXISTS (
     SELECT 1
