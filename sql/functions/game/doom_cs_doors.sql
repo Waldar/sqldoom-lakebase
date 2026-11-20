@@ -33,6 +33,17 @@ LEFT JOIN line_buttons l ON l.map_id=o.map_id AND l.sidedef_id=o.sidedef_id
   AND l.texture_part='lower'
 WHERE sd.map_id=o.map_id AND sd.id=o.sidedef_id;
 
+-- P_UpdateSpecials: a switch that pops back out clicks (sfx_swtchn), 2026-11-20.
+INSERT INTO sound_events
+  (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
+SELECT b.map_id,'button:'||b.line_id::text||':'||ps.level_tics::text,ps.level_tics,'DSSWTCHN',
+       doom_cs_doors.p_player_thing_id,((lg.x1+lg.x2)/2.0)::real,((lg.y1+lg.y2)/2.0)::real
+FROM (SELECT DISTINCT map_id,line_id FROM line_buttons
+      WHERE map_id=doom_cs_doors.p_map_id AND just_restored) b
+JOIN linedef_geom lg ON lg.map_id=b.map_id AND lg.linedef_id=b.line_id
+JOIN player_state ps ON ps.map_id=b.map_id AND ps.player_thing_id=doom_cs_doors.p_player_thing_id::int
+ON CONFLICT (map_id,event_key) DO NOTHING;
+
 any_restored := false;
 FOR _r1 IN SELECT EXISTS (SELECT 1 FROM line_buttons WHERE map_id=doom_cs_doors.p_map_id AND just_restored) AS e
 LOOP any_restored := _r1.e; END LOOP;
@@ -86,7 +97,10 @@ current_state AS (
     CASE WHEN m.plane='ceiling' AND m.direction=-1
           AND m.mover_type NOT IN ('door_close_open','door_close','crusher','ceiling_lower')
           AND (ps.sector_id=m.sector_id OR occ.sector_id IS NOT NULL)
-         THEN 1 ELSE m.direction END AS move_direction
+         THEN 1 ELSE m.direction END AS move_direction,
+    -- started this tic (doom_cs_activate_specials inserts, or re-arms, a
+    -- mover without its next heights): its starting sound, below
+    (m.next_ceiling IS NULL OR m.next_floor IS NULL) AS fresh
   FROM sector_movers m JOIN params p ON p.map_id=m.map_id
   JOIN sectors s ON s.map_id=m.map_id AND s.id=m.sector_id
   LEFT JOIN player_sector ps ON TRUE
@@ -154,7 +168,8 @@ next_state AS (
       WHEN m.move_direction=0 THEN GREATEST(0,m.countdown-1)
       ELSE m.countdown END AS computed_countdown
   FROM motion m
-)
+),
+moved AS (
 UPDATE sector_movers mover
 SET direction=n.computed_direction,countdown=n.computed_countdown,
     -- A mover that has arrived or is waiting starts its next leg whole.
@@ -163,7 +178,44 @@ SET direction=n.computed_direction,countdown=n.computed_countdown,
     moved_this_tick=(n.computed_ceiling<>n.ceil_height
       OR n.computed_floor<>n.floor_height)
 FROM next_state n
-WHERE mover.map_id=n.map_id AND mover.sector_id=n.sector_id;
+WHERE mover.map_id=n.map_id AND mover.sector_id=n.sector_id
+RETURNING n.map_id,n.sector_id,n.mover_type::text AS mover_type,n.speed >= 4 AS blazing,n.fresh,
+          n.direction AS old_dir,n.move_direction,n.computed_direction AS new_dir
+)
+-- The movers' one-shot sounds (2026-11-20; until then every moving door and
+-- lift ground with api_sound_loops' DSSTNMOV and no door ever closed with
+-- its own sound). Doors (p_doors.c): sfx_doropn / sfx_bdopn opening,
+-- sfx_dorcls / sfx_bdcls closing (also when the wait ends), sfx_doropn when
+-- something under it sends it back up, sfx_bdcls again when a blazing door
+-- reaches the floor; re-using a moving door is silent (EV_VerticalDoor).
+-- Lifts (p_plats.c): sfx_pstart leaving, sfx_pstop arriving. Floors
+-- (T_MoveFloor): sfx_pstop arriving; their sfx_stnmov is the loop.
+INSERT INTO sound_events
+  (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
+SELECT mv.map_id,'mover:'||mv.sector_id::text||':'||ps.level_tics::text||':'||s.snd,
+       ps.level_tics,s.snd,doom_cs_doors.p_player_thing_id,so.x::real,so.y::real
+FROM moved mv
+JOIN sector_sound_origins so ON so.map_id=mv.map_id AND so.sector_id=mv.sector_id
+JOIN player_state ps ON ps.map_id=mv.map_id AND ps.player_thing_id=doom_cs_doors.p_player_thing_id::int
+CROSS JOIN LATERAL (SELECT CASE
+  WHEN mv.mover_type LIKE 'door%' THEN CASE
+    WHEN mv.fresh AND mv.old_dir=1 THEN CASE WHEN mv.blazing THEN 'DSBDOPN' ELSE 'DSDOROPN' END
+    WHEN mv.fresh AND mv.old_dir=-1 THEN CASE WHEN mv.blazing THEN 'DSBDCLS' ELSE 'DSDORCLS' END
+    WHEN mv.old_dir=-1 AND mv.move_direction=1 THEN 'DSDOROPN'
+    WHEN mv.old_dir=0 AND mv.new_dir=-1 THEN CASE WHEN mv.blazing THEN 'DSBDCLS' ELSE 'DSDORCLS' END
+    WHEN mv.old_dir=0 AND mv.new_dir=1 THEN 'DSDOROPN'
+    WHEN mv.blazing AND mv.old_dir=-1 AND mv.move_direction=-1 AND mv.new_dir=2
+         AND mv.mover_type IN ('door_raise','door_manual_raise','door_close') THEN 'DSBDCLS'
+  END
+  WHEN mv.mover_type LIKE 'platform%' THEN CASE
+    WHEN mv.fresh THEN 'DSPSTART'
+    WHEN mv.old_dir=0 AND mv.new_dir IN (1,-1) THEN 'DSPSTART'
+    WHEN mv.old_dir IN (1,-1) AND mv.new_dir IN (0,2) THEN 'DSPSTOP'
+  END
+  WHEN mv.mover_type LIKE 'floor%' AND mv.old_dir IN (1,-1) AND mv.new_dir=2 THEN 'DSPSTOP'
+END AS snd) s
+WHERE s.snd IS NOT NULL
+ON CONFLICT (map_id,event_key) DO NOTHING;
 
 UPDATE sectors s SET ceil_height=m.next_ceiling
 FROM sector_movers m

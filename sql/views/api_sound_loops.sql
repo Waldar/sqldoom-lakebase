@@ -21,6 +21,10 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
              JOIN input i ON ((i.map_id = sm.map_id)))
              JOIN sector_sound_origins so ON (((so.map_id = sm.map_id) AND (so.sector_id = sm.sector_id))))
           WHERE (sm.direction = ANY (ARRAY['-1'::integer, 1]))
+            -- sfx_stnmov is T_MoveFloor's and T_MoveCeiling's (crushers
+            -- included): doors and lifts have one-shot sounds instead
+            -- (doom_cs_doors), 2026-11-20
+            AND (sm.mover_type)::text = ANY (ARRAY['floor_lower'::text, 'floor_raise'::text, 'ceiling_lower'::text, 'ceiling_raise'::text, 'crusher'::text])
         UNION ALL
          SELECT ('chainsaw:'::text || (i.player_thing_id)::text),
                 CASE
@@ -31,7 +35,16 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
             NULL::double precision AS float8
            FROM (input i
              JOIN player_weapons pw ON (((pw.map_id = i.map_id) AND (pw.player_thing_id = i.player_thing_id))))
-          WHERE ((pw.current_weapon = 8) AND (pw.state <> 'down'::weapon_state))
+          -- A_WeaponReady's sfx_sawidl in the ready state, A_Saw's sfx_sawful
+          -- firing; nothing while it comes up (DSSAWUP plays) or goes down;
+          -- while a bite's DSSAWHIT (doom_cs_hitscan_apply) is recent, no
+          -- DSSAWFUL over it: A_Saw plays one or the other (2026-11-20)
+          WHERE ((pw.current_weapon = 8) AND (pw.state <> ALL (ARRAY['down'::weapon_state, 'up'::weapon_state]))
+            AND NOT ((pw.state = 'fire'::weapon_state) AND (EXISTS ( SELECT 1
+                   FROM (sound_events se
+                     JOIN player_state ps ON (((ps.map_id = se.map_id) AND (ps.player_thing_id = i.player_thing_id))))
+                  WHERE ((se.map_id = i.map_id) AND (se.source_thing_id = i.player_thing_id) AND (se.sound_name = 'DSSAWHIT'::text)
+                    AND (se.level_tic >= (ps.level_tics - 8)))))))
         ), positioned AS (
          SELECT l.loop_key,
             l.sound_name,

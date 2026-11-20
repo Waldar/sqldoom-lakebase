@@ -172,7 +172,11 @@ ON CONFLICT (map_id,sector_id) DO UPDATE SET
                  ELSE sector_movers.direction END,
   countdown=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
                  THEN 0 ELSE sector_movers.countdown END,
+  -- No next height marks a starting door (doom_cs_doors plays its sound):
+  -- only a finished one restarts; re-using a moving door turns it round
+  -- silently, as EV_VerticalDoor (2026-11-20).
   next_ceiling=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
+                     AND sector_movers.direction=2
                     THEN NULL ELSE sector_movers.next_ceiling END,
   moved_this_tick=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
                        THEN FALSE ELSE sector_movers.moved_this_tick END;
@@ -721,6 +725,25 @@ SET position_x=ch.dest_x, position_y=ch.dest_y,
     sector_id=ch.sector_id
 FROM chosen ch
 WHERE ps.map_id=ch.map_id AND ps.player_thing_id=ch.player_thing_id;
+
+-- EV_Teleport's two MT_TFOGs: sfx_telept where the player left (its Thing
+-- still there) and where it arrived (2026-11-20; monsters had it already).
+INSERT INTO sound_events
+  (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
+SELECT ps.map_id, v.k||ps.player_thing_id::text||':'||ps.level_tics::text, ps.level_tics, 'DSTELEPT',
+       ps.player_thing_id, v.x, v.y
+FROM player_state ps
+JOIN things t ON t.map_id=ps.map_id AND t.id=ps.player_thing_id
+CROSS JOIN LATERAL (VALUES ('plr-tele-out:', t.x::real, t.y::real),
+                           ('plr-tele-in:', ps.position_x::real, ps.position_y::real)) v(k, x, y)
+WHERE ps.map_id=doom_cs_activate_specials.p_map_id
+  AND (t.x IS DISTINCT FROM ps.position_x OR t.y IS DISTINCT FROM ps.position_y)
+  AND EXISTS (SELECT 1 FROM line_special_events e
+              JOIN linedefs ld ON ld.map_id=e.map_id AND ld.id=e.line_id
+              JOIN line_special_defs d ON d.special=ld.special
+                AND d.mechanic='teleport'
+              WHERE e.map_id=ps.map_id AND e.player_thing_id=ps.player_thing_id)
+ON CONFLICT (map_id,event_key) DO NOTHING;
 
 UPDATE things t
 SET x=ps.position_x, y=ps.position_y, z=ps.view_z, angle=ps.view_angle

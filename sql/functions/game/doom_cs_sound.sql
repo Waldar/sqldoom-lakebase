@@ -35,16 +35,28 @@ weapon_grant AS (
   SELECT map_id,player_thing_id,COUNT(*)>0 AS granted
   FROM pickup_grants GROUP BY map_id,player_thing_id
 ),
+-- P_TouchSpecialThing: sfx_getpow for the power-ups and the soulsphere
+-- (invulnerability 2022, berserk 2023, invisibility 2024, radiation suit 2025,
+-- computer map 2026, light amplification 2045, soulsphere 2013), 2026-11-20.
+power_grant AS (
+  SELECT pt.map_id,pt.player_thing_id,COUNT(*)>0 AS power
+  FROM pickup_touches pt JOIN things it ON it.map_id=pt.map_id AND it.id=pt.thing_id
+  WHERE it.type IN (2013,2022,2023,2024,2025,2026,2045)
+  GROUP BY pt.map_id,pt.player_thing_id
+),
 input AS (
   SELECT g.map_id,g.player_thing_id,ps.level_tics AS level_tic,
          COALESCE(p.changed,FALSE) AS pickup_changed,
-         COALESCE(gr.granted,FALSE) AS weapon_granted,g.use_requested
+         COALESCE(gr.granted,FALSE) AS weapon_granted,COALESCE(pg.power,FALSE) AS power_granted,
+         g.use_requested
   FROM game_tic_commands g
   JOIN player_state ps ON ps.map_id=g.map_id
     AND ps.player_thing_id=g.player_thing_id
   LEFT JOIN pickup p ON p.map_id=g.map_id AND p.player_thing_id=g.player_thing_id
   LEFT JOIN weapon_grant gr ON gr.map_id=g.map_id
     AND gr.player_thing_id=g.player_thing_id
+  LEFT JOIN power_grant pg ON pg.map_id=g.map_id
+    AND pg.player_thing_id=g.player_thing_id
   WHERE g.map_id=doom_cs_sound.p_map_id::int AND g.player_thing_id=doom_cs_sound.p_player_thing_id::int
 ),
 player_pos AS (
@@ -62,8 +74,10 @@ sound_pick AS (
 events AS (
   SELECT p.map_id,'player-fire:'||p.player_thing_id::text||':'||pw.shot_serial::text AS event_key,
          p.level_tic,
+         -- the fist and the chainsaw: their sounds come from what they hit
+         -- (doom_cs_hitscan_apply) and the chainsaw's loop (api_sound_loops)
          CASE pw.current_weapon
-           WHEN 1 THEN 'DSPUNCH' WHEN 2 THEN 'DSPISTOL'
+           WHEN 1 THEN NULL WHEN 2 THEN 'DSPISTOL'
            WHEN 3 THEN 'DSSHOTGN' WHEN 4 THEN 'DSPISTOL'
            WHEN 5 THEN 'DSRLAUNC' WHEN 6 THEN 'DSPLASMA'
            WHEN 7 THEN 'DSBFG' WHEN 8 THEN NULL
@@ -75,31 +89,49 @@ events AS (
 
   UNION ALL
   SELECT p.map_id,'pickup:'||p.player_thing_id::text||':'||p.level_tic::text,p.level_tic,
-         CASE WHEN p.weapon_granted THEN 'DSWPNUP' ELSE 'DSITEMUP' END,
+         CASE WHEN p.weapon_granted THEN 'DSWPNUP' WHEN p.power_granted THEN 'DSGETPOW' ELSE 'DSITEMUP' END,
          p.player_thing_id,p.px,p.py
   FROM player_pos p WHERE p.pickup_changed
 
   UNION ALL
   SELECT p.map_id,'use:'||p.player_thing_id::text||':'||p.level_tic::text,p.level_tic,
+         -- P_UseLines (2026-11-20): a locked door oofs; a manual door's own
+         -- sound comes from its mover (doom_cs_doors); a switch clicks
+         -- (sfx_swtchx for an exit) when it has a switch texture to flip, as
+         -- P_ChangeSwitchTexture: line_buttons holds it (a lift worked from
+         -- its plain wall, E1M2 line 178, clicked until then); a plain wall
+         -- grunts (sfx_noway), as does
+         -- a used-up one-shot switch (its special is cleared in Doom); a line
+         -- with another special, its back side, or nothing in reach: silent.
          CASE
            WHEN COALESCE(r.locked,FALSE) THEN 'DSOOF'
-           WHEN COALESCE(r.eligible,FALSE) AND r.special IN
-                (1,26,27,28,31,32,33,34,117,118) THEN 'DSDOROPN'
+           WHEN COALESCE(r.eligible,FALSE) AND d.door_target='back' THEN NULL
+           WHEN COALESCE(r.eligible,FALSE) AND NOT EXISTS (SELECT 1 FROM line_buttons lb
+                WHERE lb.map_id=r.map_id AND lb.line_id=r.line_id) THEN NULL
+           WHEN COALESCE(r.eligible,FALSE) AND COALESCE(d.is_exit,FALSE) THEN 'DSSWTCHX'
            WHEN COALESCE(r.eligible,FALSE) THEN 'DSSWTCHN'
-           ELSE 'DSNOWAY'
+           WHEN r.line_id IS NOT NULL AND r.special=0 THEN 'DSNOWAY'
+           WHEN r.line_id IS NOT NULL AND COALESCE(d.use_activated AND d.use_once,FALSE) THEN 'DSNOWAY'
          END,
          p.player_thing_id,p.px,p.py
   FROM player_pos p
   LEFT JOIN line_use_results r ON r.map_id=p.map_id
     AND r.player_thing_id=p.player_thing_id
+  LEFT JOIN line_special_defs d ON d.special=r.special AND r.special<>0
   WHERE p.use_requested
 
   UNION ALL
   SELECT p.map_id,
          'monster-fire:'||ai.thing_id::text||':'||p.level_tic::text,
          p.level_tic,
+         -- A_Chase's attacksound (2026-11-20): the demon and the spectre
+         -- bite with sfx_sgtatk; the cacodemon's bite (A_HeadAttack) and the
+         -- lost soul's charge (sfx_sklatk, not in the shareware WAD) are silent.
          CASE
            WHEN d.attack_sound IS NOT NULL THEN d.attack_sound
+           WHEN t.type IN (3002,58) THEN 'DSSGTATK'
+           WHEN t.type=3006 THEN NULL
+           WHEN t.type=3005 AND sqrt(power(t.x-p.px,2)+power(t.y-p.py,2))<=64.0 THEN NULL
            WHEN d.missile_type IS NOT NULL
                 AND NOT (d.melee_mult IS NOT NULL
                          AND sqrt(power(t.x-p.px,2)+power(t.y-p.py,2))<=64.0)
