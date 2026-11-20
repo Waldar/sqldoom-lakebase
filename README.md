@@ -13,7 +13,7 @@ SQLDoom was written by CedarDB for CedarDB, with its 106 game functions in Cedar
 ```
 browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
   page (web/, web/game/)             relay: Postgres wire protocol over WebSocket,
-  render pool (1-6 frames             OAuth login injected by the app, statement allow-list,
+  render pool (1-4 frames             OAuth login injected by the app, statement allow-list,
   in flight)                          frame deltas + deflate
                                      game manager (sqldoom.lakebase.games): one branch per game
                                      referee per game (child process, sqldoom.game): the game
@@ -28,7 +28,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
 
 * A game's branch is created from `game-template` in about 3 s and deleted when the game ends.
 * Every browser tab gets its own seat. The app logs every browser in as its service principal, so the player identity is a per-connection setting (`doom.player`: user email from the app's forwarded header plus a per-tab token), read by `doom_caller()`.
-* Frames are SQL views per map and seat (`api_frame_idx_slot<n>_m<map>`, plus `_low` for low detail). The page keeps 1 to 6 frame queries in flight, each on its own connection.
+* Frames are SQL views per map and seat (`api_frame_idx_slot<n>_m<map>`, plus `_low` for low detail). The app renders them next to the database on 1 to 4 render threads per player, each with its own connection, and pushes them to the page over one WebSocket (`src/sqldoom/server/frames.py`); the page's own connections, 1 to 4, are the fallback.
 
 ## Repository layout
 

@@ -48,8 +48,8 @@ from sqldoom.server.metrics import METRICS
 REPO = Path(__file__).resolve().parents[3]
 WEB_ROOT = Path(os.getenv("DOOM_WEB_ROOT", REPO / "web"))
 MAX_FPS = int(os.getenv("DOOM_MAX_FPS", "35"))
-# Render connections per player at page load (1 to 6); the page changes it live.
-RENDER_POOL_SIZES = (1, 2, 3, 4, 5, 6)
+# Render threads per player at page load (1 to 4); the page changes it live.
+RENDER_POOL_SIZES = (1, 2, 3, 4)   # 1 to 4 since 2026-11-20 (web/host.js)
 RENDER_CONNS = int(os.getenv("DOOM_RENDER_CONNS", "4"))
 ENDPOINTS = endpoints()
 MAPS = [m.strip() for m in os.getenv("ROTATION", REFEREE_ENV["ROTATION"]).split(",") if m.strip()]

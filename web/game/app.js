@@ -68,7 +68,8 @@ const FRAMES_IN_FLIGHT = 2;   // see the frame loop; a third request only queued
 // coding, so the cap is the one knob on egress; config.json (max_fps, from
 // the relay's DOOM_MAX_FPS) sets it, 0 means none.
 let maxFps = 35;
-let renderConns = 4;   // patched: render pool size, 1, 2, 4 or 6
+let renderConns = 4;   // patched: render pool size, 1 to 4
+const POOL_SIZES_ALL = [1, 2, 3, 4];   // what the app's config may set at page load
 let lowDetail = false;   // patched: low-detail frames (160 scene columns, doubled in JS)
 
 const $ = (id) => document.getElementById(id);
@@ -679,7 +680,7 @@ async function play(user, password, target, nick, guest) {
   }).catch(() => {});
 
   // ---- the render pool ----------------------------------------------------
-  // Frames come from a pool of 1, 2, 4 or 6
+  // Frames come from a pool of 1 to 4
   // Postgres connections with one frame in flight each, so up to N renders
   // run at once on N database cores. The host page picks N while playing
   // (postMessage action 'render_conns'). Input and game state stay on `pg`,
@@ -701,7 +702,7 @@ async function play(user, password, target, nick, guest) {
   //    cycle, 2026-11-04). The camera runs right before its frame, so the
   //    pose is as fresh as before; pacing stays Little's law (round trip /
   //    lanes). localStorage.doomPipeline = '0' turns it off (A/B).
-  const POOL_SIZES = [1, 2, 3, 4, 5, 6];   // the host's automatic pacing steps by one
+  const POOL_SIZES = [1, 2, 3, 4];   // the host's automatic pacing steps by one (1 to 4 since 2026-11-20)
   // Low-detail: the view renders only even screen columns (160 instead of
   // 320) for the 3D scene; the status bar stays at full width. The output is
   // 37 121 bytes (1 header + 168×160 + 32×320). We expand it to 64 001 bytes
@@ -1299,7 +1300,7 @@ async function setup() {
     clientParallel = cfg.parallel || null;
     guestSeats = cfg.guests || 0;
     if (typeof cfg.max_fps === 'number') maxFps = Math.max(0, cfg.max_fps);
-    if ([1, 2, 3, 4, 5, 6].includes(cfg.render_conns)) renderConns = cfg.render_conns;
+    if (POOL_SIZES_ALL.includes(cfg.render_conns)) renderConns = cfg.render_conns;
   } catch (e) {
     ui.target.innerHTML = '<option value="127.0.0.1:5720">127.0.0.1:5720</option>';
   }
@@ -1355,7 +1356,7 @@ async function setup() {
       if (m.action === 'stop' && window.doomStop) window.doomStop('left the game', false);
       if (m.action === 'render_conns') {
         const n = parseInt(m.n, 10);
-        if ([1, 2, 3, 4, 5, 6].includes(n)) { renderConns = n; if (window.doomSetRenderConns) window.doomSetRenderConns(n); }
+        if (POOL_SIZES_ALL.includes(n)) { renderConns = n; if (window.doomSetRenderConns) window.doomSetRenderConns(n); }
       }
       // loading screen between two maps: no frame requests while it is up
       if (m.action === 'frames_pause' && window.doomPauseFrames) window.doomPauseFrames(!!m.on);

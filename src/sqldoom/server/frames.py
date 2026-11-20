@@ -13,7 +13,7 @@ then only delays the picture; it no longer limits the frame rate.
 Protocol, on /frames?game=<id>&tab=<tab>:
   page -> app, text JSON, any subset:  {"view": "api_frame_idx_slot1_m1",
       "conns": 2, "pause": false, "stamp": true}; view must match the relay's
-      frame views (relay.ALLOWED_RE), conns 1..6 render threads, pause stops
+      frame views (relay.ALLOWED_RE), conns 1..4 render threads, pause stops
       the clock (loading screen, automap), stamp asks for the input stamp.
   app -> page, binary: 9-byte header (seq u32, database ms x 100 u32,
       flags u8: 1 = XOR against the previous frame of the same length,
@@ -42,7 +42,7 @@ from sqldoom.lakebase.connection import CREDS, SESSION_OPTIONS
 from sqldoom.server.relay import ALLOWED_RE, log, player_identity
 
 MAX_FPS = 35.0
-MAX_CONNS = 6
+MAX_CONNS = 4   # render threads per tab, as the page's choices (1 to 4 since 2026-11-20)
 # A frame starts the moment a tic commits (LBDoom's _claim_tic): it draws
 # that tic, an input shows in the first frame after the tic that took it.
 # No tic for IDLE_S (paused, loading, intermission): IDLE_HZ slots, so the

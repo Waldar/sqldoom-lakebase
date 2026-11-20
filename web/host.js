@@ -66,15 +66,18 @@ async function changeMap(name) {
 }
 $('map-go').addEventListener('click', () => changeMap($('map-pick').value));
 
-// Render connections: 1, 2, 4 or 6 parallel frame connections (the game's
-// render pool), 4 by default. 6 is the most a 32 CU primary takes next to
-// the game loop (8 put the tic over budget, 2026-10-26). Remembered per browser; sent to the game before it joins and
+// Render connections: 1 to 4 parallel frame connections (the game's render
+// pool; render threads in the app since 2026-11-19), 4 by default. 1 to 4
+// since 2026-11-20 (owner: 3 is very useful, more than 4 should almost never
+// be needed with LBDoom's renderer: 3 hold 35 frames/s at ~51 ms a frame);
+// was 1, 2, 4 or 6, 6 being the most a 32 CU primary takes next to the game
+// loop (8 put the tic over budget, 2026-10-26). Remembered per browser; sent to the game before it joins and
 // on every change, which resizes the pool without leaving the game.
 // Auto (the default since 2026-11-12, after LBDoom's _pace_renderers): the
 // tic comes first. Every second the page reads the last 3 s of tics: under
 // 32 tics/s, or a p75 over 32 ms (past the 28.6 ms budget), takes one frame
 // connection away; 34+ tics/s with a p75 under 27 ms adds one; anything in
-// between holds; at most one change every 2 s, between 2 and 6.
+// between holds; at most one change every 2 s, between 1 and 4 (AUTO_MAX).
 // History: LBDoom's 26/22 held E1M6 at ~3 frames, 18 FPS, with the tic
 // still at 35/s and 0 dropped (2026-11-12: loosened to 27/24). That still
 // fell to 2 frames at the start of E1M6 with the tic at 26-27 ms and 35/s,
@@ -160,8 +163,8 @@ function autoNext(n, t, fps, dbMs, poolFull, now, mem) {
   mem.okSince = null;
   return n;
 }
-const CONN_CHOICES = [1, 2, 4, 6];
-const CONN_DEFAULT = 4, AUTO_MAX = 6;
+const CONN_CHOICES = [1, 2, 3, 4];
+const CONN_DEFAULT = 4, AUTO_MAX = 4;
 const saved = localStorage.getItem('sqldoom.renderConns');
 let connsAuto = saved === null || saved === 'auto';
 let renderConns = connsAuto ? CONN_DEFAULT : (CONN_CHOICES.includes(parseInt(saved, 10)) ? parseInt(saved, 10) : CONN_DEFAULT);

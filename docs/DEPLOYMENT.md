@@ -169,7 +169,7 @@ Everything the game runs in Postgres is a plain file under `sql/`, installed by 
 | `DOOM_MAX_GAMES` | `6` | Games at once |
 | `DOOM_GAME_IDLE_S` | `180` | A game nobody has open for that long ends (its branch is deleted) |
 | `DOOM_GAME_TTL_S` | `21600` | Expiry set on each game branch, as a safety net |
-| `DOOM_RENDER_CONNS` | `4` | Frames in flight per player at page load (the page's auto mode adjusts it, 2-6) |
+| `DOOM_RENDER_CONNS` | `4` | Render threads per player at page load (1 to 4; the page's auto mode adjusts it) |
 | `DOOM_MAX_FPS` | `35` | Frame request cap |
 | `DOOM_HUD_INTERVAL_MS` | `100` | Status-bar cache check interval, 0 = off |
 | `DOOM_VACUUM_INTERVAL` | `1050` | Plain VACUUM of the game tables every n tics (~30 s), 0 = off |

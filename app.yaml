@@ -22,8 +22,7 @@ env:
   # branch is born at its size; multiplayer (32 CU) switches it for its creation.
   - name: DOOM_SOLO_CU
     value: "24"
-  # Render connections per player at page load (1, 2, 4 or 6; the page can change it).
-  # 6 is the most a 32 CU endpoint takes next to the game loop (8 put the tic over budget).
+  # Render threads per player at page load (1 to 4; the page can change it, auto by default).
   - name: DOOM_RENDER_CONNS
     value: "4"
   # Status-bar cache writer (sqldoom/game/referee.py): check interval, 0 = off.
