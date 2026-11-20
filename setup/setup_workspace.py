@@ -14,7 +14,7 @@ see setup_notebook.ipynb, or from a laptop signed in with `databricks auth login
     s.run(until="sql")      # only the database part
 
 Steps (Setup.STEPS):
-  project     Lakebase project (Postgres 17), default endpoint size 24 CU
+  project     Lakebase project (Postgres 19), default endpoint size 24 CU
   compute     the default branch's primary sized for the map load (8 CU)
   database    schema doom, extensions btree_gist and pg_prewarm, work_mem 64 MB
   owner       doom_owner.sql parts 1 and 3: role doom_owner owns the schema,
@@ -73,7 +73,7 @@ class Setup:
 
     def __init__(self, project="sqldoom", app="sqldoom-ltap", wad=None, maps=MAPS, soundfont=None,
                  db="databricks_postgres", schema="doom", role="doom_owner", template="game-template",
-                 default_cu=24.0, load_cu=8.0, lobby_cu=1.0, pg_version=17, app_yaml=REPO / "app.yaml"):
+                 default_cu=24.0, load_cu=8.0, lobby_cu=1.0, pg_version=19, app_yaml=REPO / "app.yaml"):
         from databricks.sdk import WorkspaceClient
         self.w = WorkspaceClient()
         self.project_id = project
@@ -347,8 +347,16 @@ class Setup:
             # lack the Lakebase resource: add it, keeping its other resources.
             if not any(r.postgres and r.postgres.branch == self.branch for r in (app.resources or [])):
                 log(f"adding the Lakebase database of {self.branch} to {self.app_name}'s resources")
-                app = self.w.apps.update(name=self.app_name, app=A.App(
-                    name=self.app_name, resources=[r for r in (app.resources or []) if r.name != "database"] + [resource]))
+                resources = [r for r in (app.resources or []) if r.name != "database"] + [resource]
+                # Only the resources change (update_mask): the older update
+                # call rejects a request carrying the compute size, and one
+                # without it may reset fields (2026-11-20, the move to Postgres 19).
+                if hasattr(self.w.apps, "create_update"):
+                    self.w.apps.create_update(self.app_name, "resources", app=A.App(
+                        name=self.app_name, resources=resources)).result()
+                else:
+                    self.w.apps.update(name=self.app_name, app=A.App(name=self.app_name, resources=resources))
+                app = self.w.apps.get(name=self.app_name)
         except Exception as exc:
             if "does not exist" not in str(exc).lower() and "not found" not in str(exc).lower():
                 raise

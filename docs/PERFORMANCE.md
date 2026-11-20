@@ -68,6 +68,19 @@ Where a frame's time goes (12 E1M9 Nightmare poses on a copy of `game-template`,
 
 Frame spikes, live E1M9 Nightmare (80 frames with `EXPLAIN (ANALYZE, BUFFERS)`): slow frames do more work, not the same work slower. The floor and ceiling spans in view (correlation 0.74) and the sprites (0.55) explain 65% of the frame time (`28.7 ms + 5.3 ms per 1,000 geometry rows + 0.09 ms per sprite`); 2 frames in 80 were more than 12 ms over that. No temporary files, sorts on disk or multi-batch hashes. On a copy, the frame time did not move with real tics at 35 Hz next to it, with 5 other frames rendering, or with two CPU-bound sessions (all within 1 ms).
 
+## Postgres 19, 2026-11-20
+
+Lakebase offers Postgres 19 (server 19.0; lz4 is the default TOAST compression there). Measured on 24 CU against Postgres 17, each side a project or branch with all 9 maps, the same code (`356a29b75e660904`) and the referee's statistics step before timing:
+
+| | Postgres 17 | Postgres 19 | Check |
+| --- | --- | --- | --- |
+| Frame, full detail (12 E1M9 Nightmare poses) | 43.3 ms | 40.1 ms (-7.4%, faster at 12/12) | pictures byte-identical |
+| Frame, low detail | 31.8 ms | 29.3 ms (-7.9%, faster at 12/12) | byte-identical |
+| Tic, E1M9 with combat (player firing every tic, 52 monsters awake), p50 / p90 / p99, two runs | 26.7 / 35.8 / 42.6 and 26.5 / 35.9 / 42.2 ms | 21.2 / 26.1 / 31.3 and 21.4 / 30.3 / 36.1 ms | game state identical after 525 tics |
+| Tic, E1M1 with combat (22 awake) | 16.1 / 21.2 / 26.2 ms | 12.9 / 17.7 / 22.8 ms | identical |
+
+A first Postgres 19 project with only 2 maps loaded showed frames 18-23% faster: smaller tables, not the version. The app moved the same day (commit `c48deea`): a new project `projects/sqldoom-19` built with `setup/setup_workspace.py`, the menu's rules copied over, the app's database resource switched and the app deployed; the old project stays as the rollback. A fresh `production` has no `mp_match` row, which made the menu's rules request fail until `rules.py` handled it.
+
 ## Maintenance and planner stability
 
 * **Plan invalidation.** Any VACUUM or ANALYZE of a table a cached plan reads forces a re-plan (15-110 ms spikes; a VACUUM every tic costs about 13 ms per tic on E1M9). Auto-ANALYZE is off on the per-tic tables; the referee runs ANALYZE and `DISCARD PLANS` once after a map change.
@@ -88,7 +101,7 @@ Frame spikes, live E1M9 Nightmare (80 frames with `EXPLAIN (ANALYZE, BUFFERS)`):
 | One colormap string per palette | +225 ms (decompressed per pixel) |
 | `doom_const` as an inlinable SQL function | 0 |
 | `jit = off`, numeric casts, narrower wall or sprite fences, light lookup table | 0 |
-| Postgres 18 | tic about equal, frames 10% slower; staying on 17. Measured with the previous renderer: Ilia measured LBDoom's renderer on 18 with frames equal and the tic 20-30% faster, so a re-test on today's code is due |
+| Postgres 18 | tic about equal, frames 10% slower; stayed on 17. Measured with the previous renderer (Ilia measured LBDoom's renderer on 18 with frames equal and the tic 20-30% faster). Not re-tested: Postgres 19 was measured instead and adopted (above) |
 | Leaving `player_state` out of the referee's re-plan `ANALYZE` (2026-11-19) | frames 4-7 ms faster, tic 0.7-0.9 ms slower; replaced by `me_state` (frames as fast, tic unchanged) |
 | Sky column by column (2026-11-20): a matview of each sky column stored twice, a lane's 16 sky texels as one `substring` | pictures identical, frames 0.7 ms slower (full) and 0.5 ms (low): a pixel's cost is evaluating its expression (`CASE`, range test, key), not computing the texel's position |
 | `REPEATABLE READ` for frames | not run: a frame is one `SELECT`, which already reads one snapshot in `READ COMMITTED` |

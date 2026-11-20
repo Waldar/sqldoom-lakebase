@@ -1,6 +1,6 @@
 # SQLDoom on Databricks Lakebase
 
-The full [SQLDoom](https://github.com/cedardb/sqldoom), the 1993 Doom with its game logic and its renderer written in SQL, running on Databricks Lakebase (Postgres 17) and served as a Databricks App.
+The full [SQLDoom](https://github.com/cedardb/sqldoom), the 1993 Doom with its game logic and its renderer written in SQL, running on Databricks Lakebase (Postgres 19) and served as a Databricks App.
 
 SQLDoom was written by CedarDB for CedarDB, with its 106 game functions in CedarDB's `cedarscript` language. This project ported it to Postgres: the functions were translated to PL/pgSQL once ([`tools/cedar2plpgsql.py`](tools/cedar2plpgsql.py), kept as the record of the port), then tuned for Postgres by hand. The result lives in [`sql/`](sql/) as plain Postgres; nothing in the app or the setup depends on CedarDB code any more. A Databricks App runs one game per Lakebase branch: it creates the branch, runs the game loop and streams frames to the browser.
 
@@ -20,7 +20,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
                                        loop, 35 tics/s, VACUUM policy, status-bar cache, rules
                                           |
                                           v
-        Lakebase project (Postgres 17)
+        Lakebase project (Postgres 19)
           production       lobby (one row per game), 1 CU
           game-template    schema doom: WAD assets, game state, the SQL from sql/
           g-<id>           one copy-on-write branch per game, 24 CU solo / 32 CU multi

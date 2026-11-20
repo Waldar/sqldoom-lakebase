@@ -14,7 +14,7 @@ Ask these together, with the defaults shown, and wait for the answers:
 2. **App name** (default `sqldoom-ltap`; lowercase letters, digits and dashes).
 3. **Where `DOOM1.WAD` is**: a Unity Catalog volume path such as `/Volumes/<catalog>/<schema>/<volume>/DOOM1.WAD`. The shareware WAD is not in the repository; if the user has none uploaded, ask them to upload it to a volume and give you the path.
 4. **Confirmation of the changes**, listed in full so one answer covers them:
-   * create the Lakebase project (Postgres 17, default endpoint size 24 CU; during the map load the main endpoint runs at 8 CU, then 1 CU);
+   * create the Lakebase project (Postgres 19, default endpoint size 24 CU; during the map load the main endpoint runs at 8 CU, then 1 CU);
    * create the Databricks App (Medium) with the project's database as its resource;
    * grant the app's service principal the Postgres role `doom_owner` and **Can manage** on the Lakebase project (the app creates and deletes one branch per game);
    * create the `game-template` branch after the app, or, if it already exists without the app's database login, add that login there (role, `doom_owner`, CONNECT and CREATE on the database);
