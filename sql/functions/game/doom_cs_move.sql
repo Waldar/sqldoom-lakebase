@@ -266,7 +266,7 @@ sector_floor AS (
 ),
 resolved AS (
   SELECT t.*,bp.cx,bp.cy,sf.sector_id,
-         z.feet+t.eye_h AS base_z,z.next_mom_z,
+         z.feet+t.eye_h AS base_z,z.next_mom_z,z.hard_landing,
          LEAST((POWER(t.raw_mom_x,2)+POWER(t.raw_mom_y,2))/_cs.bob_factor,
                t.max_bob) AS bob_strength,
          CASE WHEN ABS(bp.cx-(t.px+t.raw_mom_x))<_cs.pos_epsilon
@@ -283,7 +283,10 @@ resolved AS (
            ELSE t.feet_z+t.old_mom_z END AS feet,
       CASE WHEN t.feet_z+t.old_mom_z<=sf.floor_height THEN 0.0
            WHEN t.old_mom_z=0.0 THEN -2.0*t.gravity
-           ELSE t.old_mom_z-t.gravity END AS next_mom_z
+           ELSE t.old_mom_z-t.gravity END AS next_mom_z,
+      -- P_ZMovement: hitting the floor faster than GRAVITY*8 is sfx_oof
+      -- (2026-11-20; the view's squat, deltaviewheight, is not done)
+      (t.feet_z+t.old_mom_z<=sf.floor_height AND t.old_mom_z < -8.0*t.gravity) AS hard_landing
   ) z
 ),
 motion AS (
@@ -305,7 +308,8 @@ motion AS (
            ELSE r.slide_mom_y*r.friction
          END AS next_mom_y
   FROM resolved r
-)
+),
+moved AS (
 UPDATE player_state ps
 SET previous_x=m.px,previous_y=m.py,
     position_x=m.cx,position_y=m.cy,
@@ -317,7 +321,15 @@ SET previous_x=m.px,previous_y=m.py,
     bob_strength=m.bob_strength,
     sector_id=m.sector_id
 FROM motion m
-WHERE ps.map_id=m.map_id AND ps.player_thing_id=m.player_thing_id;
+WHERE ps.map_id=m.map_id AND ps.player_thing_id=m.player_thing_id
+RETURNING ps.map_id,ps.player_thing_id,ps.level_tics,m.cx,m.cy,m.hard_landing
+)
+INSERT INTO sound_events
+  (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
+SELECT mv.map_id,'oof:'||mv.player_thing_id::text||':'||mv.level_tics::text,mv.level_tics,'DSOOF',
+       mv.player_thing_id,mv.cx::real,mv.cy::real
+FROM moved mv WHERE mv.hard_landing
+ON CONFLICT (map_id,event_key) DO NOTHING;
 
 UPDATE things t
 SET x=ps.position_x,y=ps.position_y,z=ps.view_z,angle=ps.view_angle

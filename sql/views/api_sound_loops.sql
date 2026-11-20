@@ -9,7 +9,9 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
         ), listener AS (
          SELECT (t.x)::double precision AS px,
             (t.y)::double precision AS py,
-            radians((t.angle)::double precision) AS angle
+            radians((t.angle)::double precision) AS angle,
+            -- E1M8: nothing fades below 15 of 127 (api_sound_events), 2026-11-20
+            (EXISTS ( SELECT 1 FROM maps mm WHERE ((mm.map_id = t.map_id) AND ((mm.name)::text ~ '^E[0-9]M8$'::text)))) AS boss_map
            FROM (things t
              JOIN input i ON (((t.map_id = i.map_id) AND (t.id = i.player_thing_id))))
         ), loops AS (
@@ -48,6 +50,7 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
         ), positioned AS (
          SELECT l.loop_key,
             l.sound_name,
+            p.boss_map,
                 CASE
                     WHEN (l.source_x IS NULL) THEN (0.0)::double precision
                     ELSE sqrt((power((l.source_x - p.px), (2)::double precision) + power((l.source_y - p.py), (2)::double precision)))
@@ -56,7 +59,8 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
                     WHEN (l.source_x IS NULL) THEN (0.0)::double precision
                     -- minus: left is pan -1 for the page's StereoPannerNode (see
                     -- api_sound_events)
-                    ELSE (- sin((atan2((l.source_y - p.py), (l.source_x - p.px)) - p.angle)))
+                    -- times 0.75: S_STEREO_SWING (api_sound_events), 2026-11-20
+                    ELSE ((- sin((atan2((l.source_y - p.py), (l.source_x - p.px)) - p.angle))) * (0.75)::double precision)
                 END AS pan
            FROM (loops l
              CROSS JOIN listener p)
@@ -65,6 +69,7 @@ CREATE OR REPLACE VIEW doom.api_sound_loops AS
     sound_name,
         CASE
             WHEN (distance <= (160.0)::double precision) THEN (1.0)::double precision
+            WHEN boss_map THEN (((15.0)::double precision / (127.0)::double precision) + (((112.0)::double precision / (127.0)::double precision) * (((1200.0)::double precision - LEAST(distance, (1200.0)::double precision)) / (1040.0)::double precision)))
             WHEN (distance >= (1200.0)::double precision) THEN (0.0)::double precision
             ELSE ((1.0)::double precision - ((distance - (160.0)::double precision) / (1040.0)::double precision))
         END AS volume,

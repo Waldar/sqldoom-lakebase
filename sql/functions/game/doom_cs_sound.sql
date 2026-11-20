@@ -75,12 +75,13 @@ events AS (
   SELECT p.map_id,'player-fire:'||p.player_thing_id::text||':'||pw.shot_serial::text AS event_key,
          p.level_tic,
          -- the fist and the chainsaw: their sounds come from what they hit
-         -- (doom_cs_hitscan_apply) and the chainsaw's loop (api_sound_loops)
+         -- (doom_cs_hitscan_apply) and the chainsaw's loop (api_sound_loops);
+         -- the BFG's as it charges (doom_cs_weapon_state), not with the ball
          CASE pw.current_weapon
            WHEN 1 THEN NULL WHEN 2 THEN 'DSPISTOL'
            WHEN 3 THEN 'DSSHOTGN' WHEN 4 THEN 'DSPISTOL'
            WHEN 5 THEN 'DSRLAUNC' WHEN 6 THEN 'DSPLASMA'
-           WHEN 7 THEN 'DSBFG' WHEN 8 THEN NULL
+           WHEN 7 THEN NULL WHEN 8 THEN NULL
          END AS sound_name,p.player_thing_id AS source_thing_id,
          p.px AS source_x,p.py AS source_y
   FROM player_pos p JOIN player_weapons pw

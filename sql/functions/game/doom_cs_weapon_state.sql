@@ -7,6 +7,8 @@ AS $function$
 DECLARE
   was_saw_up boolean;
   is_saw_up boolean;
+  was_bfg_charge boolean;
+  is_bfg_charge boolean;
 BEGIN
 
 -- P_BringUpWeapon: sfx_sawup when the chainsaw starts coming up (switched
@@ -16,6 +18,13 @@ BEGIN
 was_saw_up := COALESCE((SELECT w.current_weapon = 8 AND w.state = 'up' FROM player_weapons w
                         WHERE w.map_id = doom_cs_weapon_state.p_map_id
                           AND w.player_thing_id = doom_cs_weapon_state.p_player_thing_id), false);
+-- A_BFGsound: sfx_bfg on the BFG's first firing frame, as it charges; the
+-- ball (A_FireBFG) leaves 30 tics later. Until 2026-11-20 the sound came
+-- with the ball (doom_cs_sound, player-fire), 0.86 s late. A refire goes
+-- back to frame 0, so it sounds again.
+was_bfg_charge := COALESCE((SELECT w.current_weapon = 7 AND w.state = 'fire' AND w.seq_index = 0 FROM player_weapons w
+                            WHERE w.map_id = doom_cs_weapon_state.p_map_id
+                              AND w.player_thing_id = doom_cs_weapon_state.p_player_thing_id), false);
 
 UPDATE player_weapons w
 SET state=d.n_state,seq_index=d.n_seq,tics=d.n_tics,
@@ -31,6 +40,19 @@ WHERE w.map_id=doom_cs_weapon_state.p_map_id AND w.player_thing_id=doom_cs_weapo
 is_saw_up := COALESCE((SELECT w.current_weapon = 8 AND w.state = 'up' FROM player_weapons w
                        WHERE w.map_id = doom_cs_weapon_state.p_map_id
                          AND w.player_thing_id = doom_cs_weapon_state.p_player_thing_id), false);
+is_bfg_charge := COALESCE((SELECT w.current_weapon = 7 AND w.state = 'fire' AND w.seq_index = 0 FROM player_weapons w
+                           WHERE w.map_id = doom_cs_weapon_state.p_map_id
+                             AND w.player_thing_id = doom_cs_weapon_state.p_player_thing_id), false);
+IF _cs.is_bfg_charge AND NOT _cs.was_bfg_charge THEN
+  INSERT INTO sound_events
+    (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
+  SELECT ps.map_id, 'bfg:'||ps.player_thing_id::text||':'||ps.level_tics::text,
+         ps.level_tics, 'DSBFG', ps.player_thing_id, t.x, t.y
+  FROM player_state ps
+  JOIN things t ON t.map_id = ps.map_id AND t.id = ps.player_thing_id
+  WHERE ps.map_id = doom_cs_weapon_state.p_map_id AND ps.player_thing_id = doom_cs_weapon_state.p_player_thing_id
+  ON CONFLICT (map_id,event_key) DO NOTHING;
+END IF;
 IF _cs.is_saw_up AND NOT _cs.was_saw_up THEN
   INSERT INTO sound_events
     (map_id,event_key,level_tic,sound_name,source_thing_id,source_x,source_y)
