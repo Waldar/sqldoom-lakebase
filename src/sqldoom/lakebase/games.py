@@ -60,6 +60,17 @@ GAME_TTL_S = int(os.getenv("DOOM_GAME_TTL_S", str(6 * 3600)))
 IDLE_END_S = int(os.getenv("DOOM_GAME_IDLE_S", "180"))
 PREWARM_CONNS = int(os.getenv("DOOM_PREWARM_CONNS", "16"))
 BRANCH_PREFIX = "g-"
+# A spare single-player branch, made and warmed ahead (2026-11-20): on
+# Postgres 19 a new branch's compute takes 15-24 s to start (Postgres 17:
+# 2.6-2.8 s), most of a game's 21-27 s to ready. A solo game takes the spare
+# and only starts its referee; the next one is made in the background. Only
+# a spare made from the current template code is used; one older than
+# SPARE_MAX_AGE_S is replaced (a game keeps most of GAME_TTL_S); none is kept
+# once no game was asked for in SPARE_KEEP_S (no idle compute overnight: the
+# next game is made the slow way and brings the spare back).
+SPARE = os.getenv("DOOM_SPARE", "1") != "0"
+SPARE_MAX_AGE_S = int(os.getenv("DOOM_SPARE_MAX_AGE_S", "3600"))
+SPARE_KEEP_S = int(os.getenv("DOOM_SPARE_KEEP_S", "3600"))
 GAME_ENV = {}                                # the game referee's own env
 # IDLE_SECONDS (sqldoom.game.server): a seat whose page is silent that long is freed
 # and its player killed (5 s by default). A background tab's timers slow down
@@ -156,6 +167,12 @@ class GameManager:
         self._pg_version = None              # projects/sqldoom's, read once
         self.instance = f"{os.getenv('DATABRICKS_APP_NAME', 'local')}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
         self.leader = False
+        self._spare = None                   # {"branch", "endpoint", "version", "made"}, ready to take
+        self._spare_lock = threading.Lock()
+        self._spare_idle = threading.Event()  # set while no spare is being made
+        self._spare_idle.set()
+        self._keep = set()                   # branches the orphan sweep leaves alone (a spare)
+        self._last_demand = time.time()      # the last game asked for (the app start counts)
 
     # ------------------------------------------------------------ plumbing
     def _w(self):
@@ -237,6 +254,8 @@ class GameManager:
         self._spawn(self._refresh_template, name="games-template")
         self._spawn(self._reaper, name="games-reaper")
         self._spawn(self._seats_poller, name="games-seats")
+        if SPARE:
+            self._spawn(self._spare_keeper, name="games-spare")
         while not self._stop.wait(self.LEASE_BEAT_S):
             try:
                 if not self._take_lease():
@@ -392,6 +411,7 @@ class GameManager:
             game_id = uuid.uuid4().hex[:8]
             g = Game(game_id, mode, owner, f"{BRANCH_PREFIX}{game_id}", CU[mode], title=(title or "")[:12])
             self._games[game_id] = g
+            self._last_demand = time.time()
         self._lobby("INSERT INTO lobby.games (game_id, mode, owner, branch, cu, state) VALUES (%s, %s, %s, %s, %s, %s)",
                     (g.game_id, mode, owner, g.branch, g.cu, g.state))
         self._spawn(self._provision, g, name=f"game-{game_id}")
@@ -414,18 +434,23 @@ class GameManager:
                 while not self._template_ready.wait(2.0):
                     if self.template_state.startswith("failed") or self._stop.is_set():
                         raise RuntimeError(f"template not available: {self.template_state}")
+            spare = self._take_spare() if g.mode == "solo" else None
+            if spare:
+                # the lobby row names the spare's branch first, so the orphan
+                # sweep sees it as this game's (it stays in _keep meanwhile)
+                self._save(g, step="creating the world", branch=spare["branch"], endpoint=spare["endpoint"])
+                print(f"[games] {g.game_id}: spare branch {spare['branch']} taken "
+                      f"({time.time() - spare['made']:.0f} s old)", flush=True)
+                self._save(g, state="warming", step="loading the level")
+                self._read_cu(g)
+                self._save(g, state="starting", step="starting the game")
+                self._start_referee(g)
+                return
             self._save(g, step="creating the world" + (f" ({g.cu:g} CU)" if g.mode == "multi" else ""))
             t0 = time.time()
             w = self._w()
             self._create_branch_sized(w, g, P, Duration, FieldMask)
-            ep = self._endpoint_of(g.branch)
-            if (ep.status.autoscaling_limit_min_cu, ep.status.autoscaling_limit_max_cu) != (g.cu, g.cu):
-                self._save(g, step=f"sizing the compute ({g.cu:g} CU)")
-                ep = w.postgres.update_endpoint(name=ep.name, endpoint=P.Endpoint(name=ep.name, spec=P.EndpointSpec(
-                    endpoint_type=P.EndpointType.ENDPOINT_TYPE_READ_WRITE,
-                    autoscaling_limit_min_cu=g.cu, autoscaling_limit_max_cu=g.cu)),
-                    update_mask=FieldMask(field_mask=["spec.autoscaling_limit_min_cu",
-                                                      "spec.autoscaling_limit_max_cu"])).wait()
+            ep = self._sized_endpoint(w, g, P, FieldMask)
             self._save(g, state="warming", step="loading the level", endpoint=ep.name)
             self._read_cu(g)
             blocks = self._prewarm(ep.name)
@@ -435,6 +460,106 @@ class GameManager:
         except Exception as exc:
             print(f"[games] {g.game_id}: creation failed: {exc}", flush=True)
             self._finish(g, "failed", str(exc)[:500])
+        finally:
+            self._keep.discard(g.branch)
+
+    def _sized_endpoint(self, w, g, P, FieldMask):
+        """The branch's endpoint, resized to g.cu if it was born at another size."""
+        ep = self._endpoint_of(g.branch)
+        if (ep.status.autoscaling_limit_min_cu, ep.status.autoscaling_limit_max_cu) != (g.cu, g.cu):
+            if g.game_id in self._games:
+                self._save(g, step=f"sizing the compute ({g.cu:g} CU)")
+            ep = w.postgres.update_endpoint(name=ep.name, endpoint=P.Endpoint(name=ep.name, spec=P.EndpointSpec(
+                endpoint_type=P.EndpointType.ENDPOINT_TYPE_READ_WRITE,
+                autoscaling_limit_min_cu=g.cu, autoscaling_limit_max_cu=g.cu)),
+                update_mask=FieldMask(field_mask=["spec.autoscaling_limit_min_cu",
+                                                  "spec.autoscaling_limit_max_cu"])).wait()
+        return ep
+
+    # --------------------------------------------------------------- spare
+    def _take_spare(self):
+        """The spare, if one fits: made from the current template code and not
+        too old. One being made is waited for (it is nearer than a new one)."""
+        if not SPARE:
+            return None
+        self._spare_idle.wait(40.0)
+        with self._spare_lock:
+            s = self._spare
+            if s is None or s["version"] != code_version() or time.time() - s["made"] > SPARE_MAX_AGE_S:
+                return None
+            self._spare = None
+        try:
+            self._w().postgres.get_branch(name=self._branch_name(s["branch"]))
+        except Exception as exc:
+            print(f"[games] spare branch {s['branch']} gone ({exc}): a new branch instead", flush=True)
+            self._keep.discard(s["branch"])
+            return None
+        return s
+
+    def _make_spare(self):
+        # first of all: a game asked for from now on waits for this spare
+        # (_take_spare) instead of making a branch of its own
+        self._spare_idle.clear()
+        sid = uuid.uuid4().hex[:8]
+        g = Game(sid, "solo", None, f"{BRANCH_PREFIX}{sid}", CU["solo"])
+        self._keep.add(g.branch)
+        t0 = time.time()
+        try:
+            from databricks.sdk.service import postgres as P
+            from databricks.sdk.service.postgres import Duration, FieldMask
+            version = code_version()
+            w = self._w()
+            self._create_branch_sized(w, g, P, Duration, FieldMask)
+            ep = self._sized_endpoint(w, g, P, FieldMask)
+            blocks = self._prewarm(ep.name)
+            with self._spare_lock:
+                self._spare = {"branch": g.branch, "endpoint": ep.name, "version": version, "made": time.time()}
+            print(f"[games] spare branch {g.branch} ready in {time.time() - t0:.1f} s "
+                  f"({g.cu:g} CU, {blocks} blocks warm)", flush=True)
+            return True
+        except Exception as exc:
+            print(f"[games] spare branch {g.branch} failed: {exc}", flush=True)
+            self._delete_branch(g.branch)
+            self._keep.discard(g.branch)
+            return False
+        finally:
+            self._spare_idle.set()
+
+    def _drop_spare(self, why):
+        with self._spare_lock:
+            s, self._spare = self._spare, None
+        if s:
+            self._delete_branch(s["branch"])
+            self._keep.discard(s["branch"])
+            print(f"[games] spare branch {s['branch']} deleted ({why})", flush=True)
+
+    def _spare_keeper(self):
+        """Every 5 s: a spare while games are being asked for, a fresh one when
+        it is too old or from older code, none after SPARE_KEEP_S without a
+        new game."""
+        backoff = 0.0
+        while not self._stop.wait(5.0):
+            if not self.leader or not self._template_ready.is_set() or time.time() < backoff:
+                continue
+            now = time.time()
+            with self._spare_lock:
+                s = self._spare
+            if s:
+                if now - self._last_demand > SPARE_KEEP_S:
+                    self._drop_spare(f"no new game for {SPARE_KEEP_S} s")
+                elif now - s["made"] > SPARE_MAX_AGE_S:
+                    self._drop_spare(f"older than {SPARE_MAX_AGE_S} s")
+                elif s["version"] != code_version():
+                    self._drop_spare("made from older code")
+                continue
+            if now - self._last_demand > SPARE_KEEP_S:
+                continue
+            with self._lock:
+                live = sum(g.state in LIVE for g in self._games.values())
+            if live >= MAX_GAMES:
+                continue                           # the computes go to games first
+            if not self._make_spare():
+                backoff = time.time() + 60.0
 
     _create_lock = threading.Lock()
 
@@ -748,7 +873,7 @@ class GameManager:
                     live = {r[0] for r in self._lobby("SELECT branch FROM lobby.games WHERE ended_at IS NULL", fetch=True)}
                     for b in self._w().postgres.list_branches(parent=PROJECT):
                         bid = b.name.rsplit("/", 1)[-1]
-                        if bid.startswith(BRANCH_PREFIX) and bid not in live:
+                        if bid.startswith(BRANCH_PREFIX) and bid not in live and bid not in self._keep:
                             print(f"[games] orphan branch {bid}: deleting", flush=True)
                             self._delete_branch(bid)
                 except Exception as exc:

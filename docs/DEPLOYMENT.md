@@ -167,6 +167,8 @@ Everything the game runs in Postgres is a plain file under `sql/`, installed by 
 | `DOOM_DB_ROLE` | `doom_owner` | Role the referee and the template refresh run as |
 | `DOOM_SOLO_CU`, `DOOM_MULTI_CU` | `16`, `32` | Endpoint size of a single-player and a multiplayer game branch (16 CU ran as fast as 24 next to 3 render threads, 2026-11-20) |
 | `DOOM_MAX_GAMES` | `6` | Games at once |
+| `DOOM_SPARE` | `1` | A spare single-player branch, made and warmed ahead, so a new game skips the branch's compute start (15-24 s on Postgres 19); `0` turns it off |
+| `DOOM_SPARE_MAX_AGE_S`, `DOOM_SPARE_KEEP_S` | `3600`, `3600` | A spare older than that is replaced; with no new game for that long, none is kept (no idle compute) |
 | `DOOM_GAME_IDLE_S` | `180` | A game nobody has open for that long ends (its branch is deleted) |
 | `DOOM_GAME_TTL_S` | `21600` | Expiry set on each game branch, as a safety net |
 | `DOOM_RENDER_CONNS` | `4` | Render threads per player at page load (1 to 4; the page's auto mode adjusts it) |
