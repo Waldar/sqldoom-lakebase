@@ -29,6 +29,7 @@ UPDATE player_state ps
 SET previous_x=p.x,previous_y=p.y,
     position_x=p.x,position_y=p.y,
     base_z=p.view_z,view_z=p.view_z,view_angle=p.angle,
+    view_dip=0,view_dip_delta=0,   -- P_SpawnPlayer: viewheight = VIEWHEIGHT
     previous_view_z=p.view_z,previous_view_angle=p.angle,
     momentum_x=0,momentum_y=0,bob_strength=0,
     sector_id=p.sector_id

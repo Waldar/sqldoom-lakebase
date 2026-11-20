@@ -79,6 +79,7 @@ current_pose AS (
          ps.momentum_x::float8 AS old_mom_x,
          ps.momentum_y::float8 AS old_mom_y,
          ps.momentum_z::float8 AS old_mom_z,
+         ps.view_dip::float8 AS old_dip,ps.view_dip_delta::float8 AS old_dip_delta,
          (ps.base_z-p.eye_h)::float8 AS feet_z,
          (ps.momentum_z=0) AS on_ground,
          ps.level_tics,
@@ -306,14 +307,36 @@ motion AS (
             AND ABS(r.slide_mom_x)<r.stop_speed
             AND ABS(r.slide_mom_y)<r.stop_speed THEN 0.0
            ELSE r.slide_mom_y*r.friction
-         END AS next_mom_y
+         END AS next_mom_y,
+         h.new_dip,h.new_dip_delta
   FROM resolved r
+  -- P_CalcHeight, as offsets from the eye height (migration 0004): the rate
+  -- is added to the dip; back at the eye height it stops; never below half
+  -- the eye height (and then rising); a moving rate grows by FRACUNIT/4.
+  -- P_ZMovement, after it in the same tic: a hard landing sets the rate to
+  -- momz/8, so the view starts dipping on the next tic, as in Doom.
+  CROSS JOIN LATERAL (
+    SELECT LEAST(0.0, r.old_dip+r.old_dip_delta) AS d1,
+           CASE WHEN r.old_dip+r.old_dip_delta > 0 THEN 0.0 ELSE r.old_dip_delta END AS dd1
+  ) a
+  CROSS JOIN LATERAL (
+    SELECT GREATEST(a.d1, -r.eye_h/2.0) AS d2,
+           CASE WHEN a.d1 < -r.eye_h/2.0 AND a.dd1 <= 0 THEN 1.0/65536 ELSE a.dd1 END AS dd2
+  ) b
+  CROSS JOIN LATERAL (
+    SELECT b.d2 AS new_dip,
+           CASE WHEN r.hard_landing THEN r.old_mom_z/8.0
+                WHEN b.dd2 = 0 THEN 0.0
+                WHEN b.dd2+0.25 = 0 THEN 1.0/65536
+                ELSE b.dd2+0.25 END AS new_dip_delta
+  ) h
 ),
 moved AS (
 UPDATE player_state ps
 SET previous_x=m.px,previous_y=m.py,
     position_x=m.cx,position_y=m.cy,
-    base_z=m.base_z,view_z=m.base_z+m.bob_offset,
+    base_z=m.base_z,view_z=m.base_z+m.bob_offset+m.new_dip,
+    view_dip=m.new_dip,view_dip_delta=m.new_dip_delta,
     view_angle=m.new_angle,
     previous_view_z=ps.view_z,previous_view_angle=ps.view_angle,
     momentum_x=m.next_mom_x,momentum_y=m.next_mom_y,

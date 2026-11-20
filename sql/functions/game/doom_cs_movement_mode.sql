@@ -19,6 +19,9 @@ SET movement_mode=CASE
     OR ABS(ps.momentum_z)>0.0000001
     OR ps.bob_strength>0.0000001
     OR ABS(ps.view_z-ps.base_z)>0.0000001
+    -- the view's dip after a hard landing (doom_cs_move, migration 0004): an
+    -- idle tic would reset view_z to base_z before the dip even started
+    OR ABS(ps.view_dip)>0.0000001 OR ABS(ps.view_dip_delta)>0.0000001
     OR EXISTS (
       SELECT 1 FROM sector_movers sm
       WHERE sm.map_id=g.map_id AND sm.direction<>2
