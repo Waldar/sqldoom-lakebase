@@ -9,7 +9,10 @@ BEGIN
 UPDATE player_state ps
 SET sprite_frame = (CASE
   WHEN NOT ps.alive THEN
-    CASE WHEN ps.health < -100
+    -- S_PLAY_XDIE (PLAYO-W) below minus the spawn health: the killing
+    -- blow's unclamped health (migration 0003); health itself stops at 0,
+    -- so until 2026-11-20 a player never gibbed
+    CASE WHEN ps.death_health < -100
          THEN CHR(ASCII('O') + LEAST(8, ps.death_tics / 5))
          ELSE CHR(ASCII('H') + LEAST(6, ps.death_tics / 10)) END
   WHEN ps.pain_face_tics >= 9 THEN 'G'

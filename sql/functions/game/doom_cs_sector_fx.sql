@@ -27,6 +27,9 @@ SET armor = ps.armor - d.saved,
     armor_class = CASE WHEN ps.armor - d.saved <= 0 THEN 0
                        ELSE ps.armor_class END,
     health = GREATEST(0, ps.health - (d.amount - d.saved)),
+    -- the killing blow's unclamped health: a gib below -100 (migration 0003)
+    death_health = CASE WHEN ps.alive AND ps.health - (d.amount - d.saved) <= 0
+                        THEN ps.health - (d.amount - d.saved) ELSE ps.death_health END,
     -- P_DamageMobj: player->damagecount += damage, which reddens the screen.
     damage_count = LEAST(100, ps.damage_count + (d.amount - d.saved)),
     pain_face_tics = 12,

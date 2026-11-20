@@ -250,6 +250,8 @@ UPDATE player_state ps
 SET armor=ps.armor-d.saved,
     armor_class=CASE WHEN ps.armor-d.saved<=0 THEN 0 ELSE ps.armor_class END,
     health=GREATEST(0,ps.health-(10-d.saved)),
+    -- the killing blow's unclamped health: a gib below -100 (migration 0003)
+    death_health=CASE WHEN ps.alive AND ps.health-(10-d.saved)<=0 THEN ps.health-(10-d.saved) ELSE ps.death_health END,
     damage_count=LEAST(100,ps.damage_count+(10-d.saved)),
     pain_face_tics=12,
     alive=(ps.health-(10-d.saved))>0,

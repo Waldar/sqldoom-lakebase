@@ -239,8 +239,11 @@ events AS (
   WHERE ps.alive AND ps.pain_face_tics > 0
 
   UNION ALL
-  -- Player death
-  SELECT p.map_id,'plr-death:'||p.player_thing_id::text,p.level_tic,sp.sound_name,
+  -- Player death: A_PlayerScream's sfx_pldeth (Doom 1 has no sfx_pdiehi), or
+  -- A_XScream's sfx_slop when the killing blow gibbed it (death_health, the
+  -- unclamped health, below -100: migration 0003), 2026-11-20
+  SELECT p.map_id,'plr-death:'||p.player_thing_id::text,p.level_tic,
+         CASE WHEN ps.death_health < -100 THEN 'DSSLOP' ELSE sp.sound_name END,
          p.player_thing_id,p.px,p.py
   FROM player_pos p
   JOIN player_state ps ON ps.map_id=p.map_id

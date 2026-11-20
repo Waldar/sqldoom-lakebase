@@ -778,6 +778,8 @@ WHERE h.map_id = doom_cs_activate_specials.p_map_id AND t.map_id = h.map_id AND 
 -- Another player on the spot (deathmatch): dead, the frag to the teleporter.
 UPDATE player_state vp
 SET health = 0, alive = false, damage_count = 100, pain_face_tics = 12,
+    -- PIT_StompThing's 10000: always a gib (migration 0003)
+    death_health = vp.health - 10000,
     killer_id = tp.player_thing_id
 FROM player_state tp
 WHERE vp.map_id = doom_cs_activate_specials.p_map_id AND tp.map_id = vp.map_id

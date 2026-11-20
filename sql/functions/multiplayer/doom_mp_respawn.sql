@@ -62,7 +62,7 @@ SET health=100, alive=TRUE, armor=0, armor_class=0, backpack=FALSE,
     radsuit_tics=0, invis_tics=0, light_amp_tics=0, invuln_tics=0,
     berserk=FALSE, power_map=FALSE, god_mode=FALSE, noclip=FALSE,
     pain_face_tics=0, damage_count=0, bonus_count=0,
-    death_tics=0, killer_id=NULL, sprite_frame='A',
+    death_tics=0, killer_id=NULL, death_health=NULL, sprite_frame='A',
     momentum_x=0, momentum_y=0, momentum_z=0, bob_strength=0
 WHERE ps.map_id=doom_mp_respawn.p_map_id AND ps.player_thing_id=doom_mp_respawn.p_player_thing_id;
 

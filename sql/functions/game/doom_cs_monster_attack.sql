@@ -233,6 +233,9 @@ UPDATE player_state ps
 SET armor = ps.armor - a.saved,
     armor_class=CASE WHEN ps.armor-a.saved<=0 THEN 0 ELSE ps.armor_class END,
     health = GREATEST(0, ps.health - a.took),
+    -- the killing blow's unclamped health: a gib below -100 (migration 0003)
+    death_health = CASE WHEN ps.alive AND ps.health - a.took <= 0 THEN ps.health - a.took
+                        ELSE ps.death_health END,
     -- P_DamageMobj: player->damagecount += damage, which reddens the screen.
     damage_count = LEAST(100, ps.damage_count + a.took),
     alive = GREATEST(0, ps.health - a.took) > 0,

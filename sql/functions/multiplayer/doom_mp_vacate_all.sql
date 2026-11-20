@@ -7,7 +7,7 @@ AS $function$
 BEGIN
 
 UPDATE player_state ps
-SET alive=FALSE, health=0, killer_id=NULL, death_tics=36,
+SET alive=FALSE, health=0, killer_id=NULL, death_health=NULL, death_tics=36,
     momentum_x=0, momentum_y=0, momentum_z=0
 FROM mp_players mp
 WHERE mp.map_id=ps.map_id AND mp.player_thing_id=ps.player_thing_id
