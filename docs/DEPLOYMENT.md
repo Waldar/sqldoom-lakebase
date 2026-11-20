@@ -33,7 +33,7 @@ The numbered steps below are what the notebook does, for reference or to run by 
 
 ## 2. Lakebase project
 
-1. Create a Lakebase project with **Postgres 17** (Postgres 18 works but renders about 10% slower). Its default branch is `production`.
+1. Create a Lakebase project with **Postgres 17**, the version SQLDoom is tested and measured on (`Setup(pg_version=17)` in `setup/setup_workspace.py`). Postgres 18 works; the "frames about 10% slower" measured on it was with the previous renderer, and today's has not been measured there yet (see `docs/PERFORMANCE.md`, "Tried and not kept"). Its default branch is `production`.
 2. Set the project's **default endpoint size to 24 CU** (min = max). New game branches get the default size at birth; a multiplayer game temporarily raises the default to 32 CU while its branch is created (`DOOM_SOLO_CU`, `DOOM_MULTI_CU`).
 3. Size the `production` primary for the map load: 8 CU or more. Once the app runs, 1 CU is enough (it only serves the lobby).
 4. In the Lakebase SQL editor (database `databricks_postgres`, on `production`):
