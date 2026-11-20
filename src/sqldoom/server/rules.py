@@ -54,12 +54,19 @@ def _read(cur):
     return {r[0]: dict(zip(FIELDS, r[1:])) for r in cur.fetchall()}
 
 
+def _match(cur):
+    """The match row: (mode, state, pending, seconds left in the intermission).
+    A branch that never ran a match has none: a freshly built production
+    (2026-11-20, the move to projects/sqldoom-19: the menu's /api/match/rules
+    answered 503 until a row was copied there). Then: solo rules, no state."""
+    cur.execute("SELECT mode, state::text, pending, "
+                "EXTRACT(EPOCH FROM (intermission_until - now()))::int FROM mp_match LIMIT 1")
+    return cur.fetchone() or ("solo", None, None, None)
+
+
 def get_rules(creds, endpoint, identity):
     with _connect(creds, endpoint) as c, c.cursor() as cur:
-        cur.execute("SELECT mode, state::text, pending FROM mp_match LIMIT 1")
-        mode, state, pending = cur.fetchone()
-        cur.execute("SELECT EXTRACT(EPOCH FROM (intermission_until - now()))::int FROM mp_match LIMIT 1")
-        left = cur.fetchone()[0]
+        mode, state, pending, left = _match(cur)
         host = _host(cur)
         cur.execute("SELECT count(*) FROM mp_players mp JOIN mp_match m ON m.map_id = mp.map_id WHERE mp.role_name IS NOT NULL")
         seated = int(cur.fetchone()[0])
@@ -84,8 +91,7 @@ def switch_mode(creds, endpoint, identity, want):
                              + (f": {host[2]}" if host else "; nobody is playing"))
         cur.execute("SELECT count(*) FROM mp_players mp JOIN mp_match m ON m.map_id = mp.map_id WHERE mp.role_name IS NOT NULL")
         seated = int(cur.fetchone()[0])
-        cur.execute("SELECT mode, state::text, pending FROM mp_match LIMIT 1")
-        mode, state, pending = cur.fetchone()
+        mode, state, pending, _ = _match(cur)
         if mode == want:
             return {"ok": True, "switch": False}
         if want == "solo" and seated >= 2:
@@ -126,8 +132,7 @@ def save_rules(creds, endpoint, identity, mode, values):
         cur.execute("UPDATE mp_rules SET " + ", ".join(f"{k} = %s" for k in changed)
                     + ", updated_at = now(), updated_by = %s WHERE mode = %s",
                     (*changed.values(), identity, mode))
-        cur.execute("SELECT mode, state::text, pending FROM mp_match LIMIT 1")
-        cur_mode, state, pending = cur.fetchone()
+        cur_mode, state, pending, _ = _match(cur)
         restart = False
         if mode == cur_mode:
             cur.execute("SELECT doom_mp_rules_live()")
