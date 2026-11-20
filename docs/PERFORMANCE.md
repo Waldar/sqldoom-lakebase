@@ -81,6 +81,28 @@ Lakebase offers Postgres 19 (server 19.0; lz4 is the default TOAST compression t
 
 A first Postgres 19 project with only 2 maps loaded showed frames 18-23% faster: smaller tables, not the version. The app moved the same day (commit `c48deea`): a new project `projects/sqldoom-19` built with `setup/setup_workspace.py`, the menu's rules copied over, the app's database resource switched and the app deployed; the old project stays as the rollback. A fresh `production` has no `mp_match` row, which made the menu's rules request fail until `rules.py` handled it.
 
+## Input to picture, 2026-11-20
+
+From a key or button change in the browser to the first frame drawn that has it (`a18abb9`, as LBDoom's `?lag=1`). Each input statement returns its number (`api_input`); every tic stores the newest one it took (`game_tic_commands.inputs_upto`, migration `0005`); the app stamps each frame it pushes with the newest input the game had taken, read in the frame's own statement; the page times each input to the first frame drawn with a stamp at or past it. Copy stats shows p50 and p90 over the last 200-300 inputs.
+
+Live, owner's browser, frames from the app, full detail, Postgres 19 (17:15 and 17:18 UTC: E1M9 on Ultra-Violence, then E1M8 on Nightmare): input to picture **p50 115 and 111 ms, p90 133 and 131 ms**. Alongside: 35.1-35.7 frames/s, frames 51-54 ms in the app, every frame started on a tic, frames 28-30 ms apart (p50), tic p50 14.3-14.6 ms, ping 27-28 ms.
+
+Where the 113 ms goes (the network parts are half the ping, an estimate; the rest from the same Copy stats):
+
+| Part | ms | Share |
+| --- | --- | --- |
+| The frame, started as the tic commits | 51-54 | ~46% |
+| The network, input in and frame out | ~28 | ~25% |
+| Waiting for the next tic (0-28.6 ms) | ~14 | ~12% |
+| The tic | ~14 | ~12% |
+| Transfer, decode, drawing | a few | the rest |
+
+The p50-to-p90 spread (~20 ms) is the wait for the next tic. Moving input to the frame socket changes only the input's way in: the same network trip, and the app would still write the input to the database; about 1 ms, so it was not built. Shorter input to picture would come from the frame (low detail, about 30-40 ms) or a region nearer the player.
+
+The frame socket carries about 2.2 MB/s before the WebSocket's deflate, and XOR against the previous frame saves only ~3% of it (2,191 of 2,257 KB/s): when the view moves, almost every pixel changes. The deflated size is not visible to the page. It does not show on the owner's link (frames on time); a slow link would see late or skipped frames, not input lag.
+
+The referee's re-plan 60 s into a map (ANALYZE + DISCARD PLANS) costs a few slow tics while the tic statements are planned again: in the 17:18 snapshot, 5 s after the re-plan on E1M8, tic p99 63.7 ms, max 88.4 ms, 3 over budget, p50 unchanged at 14.3 ms.
+
 ## Maintenance and planner stability
 
 * **Plan invalidation.** Any VACUUM or ANALYZE of a table a cached plan reads forces a re-plan (15-110 ms spikes; a VACUUM every tic costs about 13 ms per tic on E1M9). Auto-ANALYZE is off on the per-tic tables; the referee runs ANALYZE and `DISCARD PLANS` once after a map change.
@@ -105,10 +127,13 @@ A first Postgres 19 project with only 2 maps loaded showed frames 18-23% faster:
 | Leaving `player_state` out of the referee's re-plan `ANALYZE` (2026-11-19) | frames 4-7 ms faster, tic 0.7-0.9 ms slower; replaced by `me_state` (frames as fast, tic unchanged) |
 | Sky column by column (2026-11-20): a matview of each sky column stored twice, a lane's 16 sky texels as one `substring` | pictures identical, frames 0.7 ms slower (full) and 0.5 ms (low): a pixel's cost is evaluating its expression (`CASE`, range test, key), not computing the texel's position |
 | `REPEATABLE READ` for frames | not run: a frame is one `SELECT`, which already reads one snapshot in `READ COMMITTED` |
+| Input on the frame socket (2026-11-20) | not built: measured first (input to picture, above), the input's way in is ~14 of ~113 ms and the same network trip on either socket; about 1 ms to gain |
 | Rendering on 4 read replicas | 25 FPS low detail but 9-20 tics of replica lag; overlapping renders stall replay (`hot_standby_feedback` is off) |
 
 ## What is left
 
-On E1M9 (8 CU) the tic is about 27-31 ms, spread over many stages, none above 4 ms: monster step 3.8, monster think 3.4, projectiles 2, doors 2, monster chase 1.9, sound 1.8, movement 1.5. Further gains need several small changes. Live on 24 CU with the frames rendered in the app (E1M9 Nightmare, 2026-11-19), the tic was p50 24-25 ms, p99 about 30 ms.
+On E1M9 (8 CU) the tic is about 27-31 ms, spread over many stages, none above 4 ms: monster step 3.8, monster think 3.4, projectiles 2, doors 2, monster chase 1.9, sound 1.8, movement 1.5. Further gains need several small changes. Live on 24 CU with the frames rendered in the app (E1M9 Nightmare, 2026-11-19), the tic was p50 24-25 ms, p99 about 30 ms; on Postgres 19 (2026-11-20, E1M9 Ultra-Violence then E1M8 Nightmare) p50 14.3-14.6 ms.
+
+Input to picture is about 113 ms p50, half of it the frame (above).
 
 The frame: the per-pixel work of floors and ceilings (`plane_lanes`) is the largest single cost; low detail draws half the columns (a frame 43.2 -> 31.8 ms on the 12 E1M9 poses). Frame-time spikes follow the scene (see above). VACUUM FULL during play is off by default (`DOOM_VACUUM_FULL_IN_GAME`); the app logs slow frames with the tic time and the referee's VACUUM / ANALYZE next to them (`frames slow ...` lines, `DOOM_FRAMES_SLOW_LOG=0` to turn off).

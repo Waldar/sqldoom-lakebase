@@ -7,7 +7,7 @@ Every step of the plan below has shipped, and both ideas of section 5:
 * **0. Frames in flight:** shipped (`1843bd3`, growth rule fixed the next day); with step 3 the rule moved to the app's render threads.
 * **1. Cheat codes:** shipped (`aab9a36`): `api_cheat_key`, single player only, through the relay's allow-list.
 * **2. Music:** shipped (`dcb57bc`), with audio: `src/sqldoom/wad/midi.py` renders with `tinysoundfont` and the TimGM6mb soundfont next to the WAD, as a setup step (`music`) or `tools/render_music.py`; the Music box became a volume slider (`34301a1`).
-* **3. Frames rendered in the app:** shipped (`src/sqldoom/server/frames.py`; details in section 3), frames started on each tic, the camera read from `player_state`. Not done: input on the same socket.
+* **3. Frames rendered in the app:** shipped (`src/sqldoom/server/frames.py`; details in section 3), frames started on each tic, the camera read from `player_state`. Input on the same socket: measured first, then dropped (below).
 * **4. Low detail:** generated from the full-detail template by `tools/make_low_detail.py` (`--check` fails when stale); 17-28% faster than full detail (`docs/PERFORMANCE.md`).
 * **5. Ideas:** the "I'M A SHAMELESS CHEATER" list in single player, and "Always run" (on by default, Shift walks).
 
@@ -18,12 +18,18 @@ Also done since (2026-11-20):
 * Sounds checked against the Doom source and fixed (`4734a1f`, `609d543`): fist, doors, lifts, switches, use, power-ups, teleporter, bites, chainsaw, the player's own sounds centred, BFG on the charge, landing "oof", stereo width, E1M8's volume floor.
 * Players gib (`ee275c1`, migration `0003`): the killing blow's unclamped health, `DSSLOP` and the gib frames.
 * No fixed-rules notes under the rules form.
+* The view dips after a hard landing, as Doom's `P_CalcHeight` (`0195049`, migration `0004`).
+* Input to picture measured in the page (`a18abb9`, migration `0005`): frames stamped with the newest input the game had taken, the first frame drawn with an input timed from its key or button event, in Copy stats. Live: 111-115 ms p50, 131-133 ms p90 (`docs/PERFORMANCE.md`, "Input to picture").
+
+Dropped (owner, 2026-11-20):
+
+* Input on the frame socket (step 3): the input's way in is about 14 ms of the 113 ms, the same network trip on either socket, and the database write stays; it would save about 1 ms.
+* Doom's approximate sound distance (`P_AproxDistance`) and the `D_INTER` music between levels.
 
 Open:
 
-* Input on the frame socket (step 3).
-* The view's dip on a hard landing (`deltaviewheight`); Doom's approximate sound distance (`P_AproxDistance`); the `D_INTER` music between levels.
 * Delete `projects/sqldoom` once Postgres 19 has run for a few days.
+* Input to picture with low detail on: the frame is about half of it, low detail should take 15-20 ms off (not measured yet).
 
 The plan as written on 2026-11-18 follows, with the progress notes added while it was done.
 
