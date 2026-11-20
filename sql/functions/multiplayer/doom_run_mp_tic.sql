@@ -24,6 +24,12 @@ IF doom_run_mp_tic.p2 IS NOT NULL THEN PERFORM doom_mp_begin_player(doom_run_mp_
 IF doom_run_mp_tic.p3 IS NOT NULL THEN PERFORM doom_mp_begin_player(doom_run_mp_tic.p_map_id,doom_run_mp_tic.p_skill,doom_run_mp_tic.p3,_cs.upto); END IF;
 IF doom_run_mp_tic.p4 IS NOT NULL THEN PERFORM doom_mp_begin_player(doom_run_mp_tic.p_map_id,doom_run_mp_tic.p_skill,doom_run_mp_tic.p4,_cs.upto); END IF;
 DELETE FROM mp_inputs WHERE map_id=doom_run_mp_tic.p_map_id AND seq <= _cs.upto;
+-- The newest input this tic took, for the frames' input stamp (migration
+-- 0005): the rows doom_cs_begin has just written for this tic.
+IF _cs.upto > 0 THEN
+  UPDATE game_tic_commands SET inputs_upto=_cs.upto
+  WHERE map_id=doom_run_mp_tic.p_map_id AND inputs_upto<>_cs.upto;
+END IF;
 PERFORM doom_run_tic_core(doom_run_mp_tic.p_map_id,doom_run_mp_tic.p_skill,doom_run_mp_tic.p1,doom_run_mp_tic.p2,doom_run_mp_tic.p3,doom_run_mp_tic.p4);
 -- TRUE when this tic ended the level: the referee then runs the intermission
 -- and moves the match on (doom_mp_rotate).

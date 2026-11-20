@@ -12,13 +12,17 @@ then only delays the picture; it no longer limits the frame rate.
 
 Protocol, on /frames?game=<id>&tab=<tab>:
   page -> app, text JSON, any subset:  {"view": "api_frame_idx_slot1_m1",
-      "conns": 2, "pause": false}; view must match the relay's frame views
-      (relay.ALLOWED_RE), conns 1..6 render threads, pause stops the clock
-      (loading screen, automap).
+      "conns": 2, "pause": false, "stamp": true}; view must match the relay's
+      frame views (relay.ALLOWED_RE), conns 1..6 render threads, pause stops
+      the clock (loading screen, automap), stamp asks for the input stamp.
   app -> page, binary: 9-byte header (seq u32, database ms x 100 u32,
       flags u8: 1 = XOR against the previous frame of the same length,
       2 = no frame, the view returned NULL: the seat is gone or the map
-      changed), then the frame's bytes.
+      changed, 4 = an input stamp u64 follows the header), then the frame's
+      bytes. The stamp (2026-11-20, as LBDoom's ?lag=1): the newest input
+      (api_input's number) the game had taken when the frame was read, in
+      the frame's own statement, so its snapshot (migration 0005); only for
+      a page that asked, so a page from before keeps its 9-byte header.
   app -> page, text JSON once a second: {"stats": {"fps", "pool_full",
       "db_ms", "conns"}}.
 Compression is the WebSocket's permessage-deflate; the XOR makes an
@@ -52,7 +56,16 @@ IDLE_S, IDLE_HZ = 0.2, 5.0
 SLOW_LOG = os.getenv("DOOM_FRAMES_SLOW_LOG", "1") != "0"
 SLOW_X = float(os.getenv("DOOM_FRAMES_SLOW_X", "1.2"))
 HEADER = struct.Struct(">IIB")
-F_DELTA, F_NULL = 1, 2
+HEADER_STAMPED = struct.Struct(">IIBQ")
+F_DELTA, F_NULL, F_STAMP = 1, 2, 4
+# The newest input of this player the game has taken (migration 0005): what
+# the last tic took, or just below the oldest of the player's inputs still
+# waiting if that is lower (one committed while that tic ran).
+STAMP_SQL = ("(SELECT LEAST(g.inputs_upto, COALESCE((SELECT MIN(i.seq) - 1 FROM mp_inputs i"
+             " WHERE i.map_id = g.map_id AND i.player_thing_id = g.player_thing_id), g.inputs_upto))"
+             " FROM game_tic_commands g JOIN mp_players mp"
+             " ON mp.map_id = g.map_id AND mp.player_thing_id = g.player_thing_id"
+             " WHERE mp.role_name = doom_caller())")
 # A frame's session, as LBDoom's render threads (engine.py SESSION_SETTINGS):
 # no JIT (planning a frame with it cost more than the frame), one generic plan.
 SESSION_SQL = ("SET jit = off", "SET plan_cache_mode = force_generic_plan", "SET work_mem = '8MB'")
@@ -66,6 +79,7 @@ class FrameStream:
         self.loop, self.endpoint, self.player, self.metrics = loop, endpoint, player, metrics
         self.view = None
         self.paused = False
+        self.stamp = False            # the page asked for input stamps
         self.target = 2
         self.stop = threading.Event()
         self.slots = queue.Queue()
@@ -91,6 +105,8 @@ class FrameStream:
                 self.view = v
         if "pause" in msg:
             self.paused = bool(msg["pause"])
+        if "stamp" in msg:
+            self.stamp = bool(msg["stamp"])
         if "conns" in msg:
             try:
                 self.resize(int(msg["conns"]))
@@ -208,17 +224,21 @@ class FrameStream:
                     prepared = {}
                 if not self._claim(retire):
                     break
-                view = self.view
+                view, stamped = self.view, self.stamp
                 if view is None:
                     continue
                 with self.lock:
                     self.seq += 1
                     seq = self.seq
-                name = prepared.get(view)
+                name = prepared.get((view, stamped))
                 if name is None:
                     name = f"frames_{len(prepared)}"
-                    cur.execute(f"PREPARE {name} AS SELECT frame_rgb FROM {view}")
-                    prepared[view] = name
+                    if stamped:
+                        cur.execute(f"PREPARE {name} AS SELECT f.frame_rgb, {STAMP_SQL} FROM {view} f")
+                    else:
+                        cur.execute(f"PREPARE {name} AS SELECT frame_rgb FROM {view}")
+                    prepared[(view, stamped)] = name
+                if view not in reads_state:
                     # the old views read mp_players.pose_x (pg_get_viewdef
                     # reformats a view's text, so look for the column)
                     cur.execute("SELECT pg_get_viewdef(%s::regclass) !~ 'pose_x'", (f"doom.{view}",))
@@ -245,9 +265,10 @@ class FrameStream:
                         if len(self.done) > 2000:
                             del self.done[:1000]
                 frame = bytes(row[0]) if row and row[0] is not None else None
+                stamp = int(row[1]) if stamped and row and len(row) > 1 and row[1] is not None else None
                 if frame is not None:
                     self.metrics.frame("primary", ms)
-                self.loop.call_soon_threadsafe(self.out.put_nowait, (seq, ms, frame))
+                self.loop.call_soon_threadsafe(self.out.put_nowait, (seq, ms, frame, stamp))
             except Exception as exc:  # noqa: BLE001 - a render thread must not die on one frame
                 self.errors += 1
                 if self.errors <= 5 or self.errors % 100 == 0:
@@ -271,7 +292,7 @@ class FrameStream:
         sent = 0
         while True:
             try:
-                seq, ms, frame = await asyncio.wait_for(self.out.get(), timeout=1.0)
+                seq, ms, frame, stamp = await asyncio.wait_for(self.out.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 seq = None
             if seq is not None and seq > last_seq:
@@ -286,7 +307,10 @@ class FrameStream:
                     else:
                         payload = (int.from_bytes(frame, "big") ^ int.from_bytes(p, "big")).to_bytes(len(frame), "big")
                         flags = F_DELTA
-                    msg = HEADER.pack(seq, int(ms * 100), flags) + payload
+                    if stamp is None:
+                        msg = HEADER.pack(seq, int(ms * 100), flags) + payload
+                    else:
+                        msg = HEADER_STAMPED.pack(seq, int(ms * 100), flags | F_STAMP, max(0, stamp)) + payload
                     await ws.send_bytes(msg)
                     self.sent_bytes += len(msg)
                     sent += 1

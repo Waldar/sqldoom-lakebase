@@ -678,6 +678,12 @@ $('copy').addEventListener('click', async () => {
         : `frame = db ${fmt(b.db, 0)} + net+proxy ${fmt(b.net, 0)} + transfer ${fmt(b.xfer, 1)} + decode ${fmt(b.decode, 1)} + wait ${fmt(b.wait, 1)} ms`,
     app ? `gap between frames ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms`
         : `camera ${fmt(b.camera, 0)} \u00b7 gap ${fmt(b.gapP50, 0)} / ${fmt(b.gapMax, 0)} \u00b7 stall ${fmt(b.stall, 0)} \u00b7 conn round trip ${fmt(b.relayRt, 0)} \u00b7 ping ${fmt(b.ping, 0)} \u00b7 tic round trip ${fmt(live.ticRtt, 0)} ms`,
+    // input to picture: a key or button change to the first frame drawn that
+    // has it (web/game/app.js, frames stamped by the app)
+    !app ? 'input to picture: only measured with frames from the app'
+      : b.inputLag ? `input to picture p50 ${fmt(b.inputLag.p50, 0)} \u00b7 p90 ${fmt(b.inputLag.p90, 0)} ms`
+                     + ` (key or button to the first frame drawn with it, last ${b.inputLag.n} inputs)`
+      : 'input to picture: no input timed yet (press a key or button while playing)',
     b.pipeline == null ? 'browser switches: not reported yet (no frame statistics yet)' :
     `browser switches: pipeline ${b.pipeline} per connection \u00b7 interpolate ${b.interpolate ? 'on' : 'off'} \u00b7 input at once ${b.inputNow === false ? 'off' : 'on'} \u00b7 coalesce ${b.coalesce ? 'on' : 'off'}`
       + (b.changed && b.changed.length

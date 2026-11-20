@@ -18,6 +18,32 @@ const INPUT_NOW = localStorage.getItem('doomInputNow') !== '0';
 const INPUT_CODES = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown',
   'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Space']);
 let sendInputNow = null;   // set while playing
+// Input to picture (2026-11-20, as LBDoom's ?lag=1): from a key or button
+// change to the first frame drawn that has it. Each input statement returns
+// its number (api_input); the app stamps every frame it pushes with the
+// newest number the game had taken when the frame was read (frames.py), so
+// the first frame drawn with a stamp at or past an input's number is the
+// first picture with it. Only with frames from the app; shown in Copy stats.
+const lag = { sent: [], samples: [], changedAt: null, lastStamp: -1, raced: 0 };
+const lagChanged = () => { if (lag.changedAt === null) lag.changedAt = performance.now(); };
+const lagTake = () => { const t = lag.changedAt; lag.changedAt = null; return t; };
+const lagSent = (res, t) => {
+  if (t == null) return;
+  const n = res && res.rows && res.rows[0] ? parseInt(res.rows[0][0], 10) : 0;
+  if (!(n > 0)) return;
+  // already in a drawn frame before its answer came back: not timed
+  if (n <= lag.lastStamp) { lag.raced++; return; }
+  lag.sent.push([n, t]);
+};
+const lagDrawn = (stamp) => {
+  const now = performance.now(), s = lag.sent;
+  lag.lastStamp = Math.max(lag.lastStamp, stamp);
+  while (s.length && now - s[0][1] > 5000) s.shift();   // a menu was up: dropped
+  let i = 0;
+  for (; i < s.length && s[i][0] <= stamp; i++) lag.samples.push(now - s[i][1]);
+  if (i) s.splice(0, i);
+  if (lag.samples.length > 400) lag.samples.splice(0, lag.samples.length - 200);
+};
 // Doom's cheat codes, typed while playing, single player only: the host page
 // turns them on (action 'cheats'); each letter or digit goes to
 // api_cheat_key, which also checks the match is solo.
@@ -128,13 +154,13 @@ window.addEventListener('keydown', (ev) => {
     if (ev.code === 'Equal' || ev.code === 'NumpadAdd') amPending.push({ name: 'am_zoom', params: [1.25] });
     if (ev.code === 'Minus' || ev.code === 'NumpadSubtract') amPending.push({ name: 'am_zoom', params: [1 / 1.25] });
   }
-  if (INPUT_CODES.has(ev.code) && sendInputNow) sendInputNow();
+  if (INPUT_CODES.has(ev.code)) { lagChanged(); if (sendInputNow) sendInputNow(); }
   if (!['F5', 'F11', 'F12'].includes(ev.code)) ev.preventDefault();
 });
 window.addEventListener('keyup', (ev) => {
   if (ev.code === 'Tab') { ev.preventDefault(); scoreHeld = false; refreshScore(); }
   const had = keys.delete(ev.code);
-  if (had && INPUT_CODES.has(ev.code) && sendInputNow) sendInputNow();
+  if (had && INPUT_CODES.has(ev.code)) { lagChanged(); if (sendInputNow) sendInputNow(); }
 });
 window.addEventListener('blur', () => keys.clear());
 // The mouse: a click on the screen locks the pointer while playing. Chrome
@@ -160,10 +186,10 @@ document.addEventListener('pointerlockerror', () => {
   if (!lockAsksWithPromise) status('mouse capture failed; click the screen again', true);
 });
 ui.canvas.addEventListener('mousedown', (ev) => {
-  if (ev.button === 0 && document.pointerLockElement === ui.canvas) { input.fireHeld = true; if (sendInputNow) sendInputNow(); }
+  if (ev.button === 0 && document.pointerLockElement === ui.canvas) { input.fireHeld = true; lagChanged(); if (sendInputNow) sendInputNow(); }
 });
 window.addEventListener('mouseup', (ev) => {
-  if (ev.button === 0 && input.fireHeld) { input.fireHeld = false; if (sendInputNow) sendInputNow(); }
+  if (ev.button === 0 && input.fireHeld) { input.fireHeld = false; lagChanged(); if (sendInputNow) sendInputNow(); }
 });
 window.addEventListener('mousemove', (ev) => {
   if (document.pointerLockElement === ui.canvas) input.mouseTurn += ev.movementX * MOUSE_SENSITIVITY;
@@ -598,12 +624,14 @@ async function play(user, password, target, nick, guest) {
       }
       const command = readCommand(stats.alive);
       lastTic = performance.now();
-      const [, me, ev, lp] = await pg.run([
+      const changed = lagTake();
+      const [inp, me, ev, lp] = await pg.run([
         { name: 'input', params: command },
         { name: 'me' },
         { name: 'events', params: [lastEvent] },
         { name: 'loops' },
       ]);
+      lagSent(inp, changed);
       // The tic's latency as the player feels it: input out, own state back.
       stats.ticRtt += performance.now() - lastTic; stats.tics++;
       if (me.rows.length) {
@@ -632,7 +660,8 @@ async function play(user, password, target, nick, guest) {
   // connection, so the tic that starts next already has it.
   sendInputNow = INPUT_NOW ? () => {
     if (!running || ticInFlight > 2) return;
-    pg.run([{ name: 'input', params: readCommand(stats.alive, false) }]).catch(() => {});
+    const changed = lagTake();
+    pg.run([{ name: 'input', params: readCommand(stats.alive, false) }]).then(([r]) => lagSent(r, changed)).catch(() => {});
   } : null;
   // A cheat's message shows on the frame's message line (api_cheat_key puts
   // it there); idclev asks the host page for the map change.
@@ -875,16 +904,18 @@ async function play(user, password, target, nick, guest) {
       for (const w of s.waiters.splice(0)) w.reject(new Error('frames stream closed'));
       if (running) resizePool(wantConns);
     };
-    const deliver = (frame) => {
+    // a frame and its input stamp (null without one) go to the drawing
+    // together, as the row [frame, stamp]
+    const deliver = (frame, stamp) => {
       const w = s.waiters.shift();
-      if (w) w.resolve([{ rows: [[frame]] }]); else s.latest = frame;
+      if (w) w.resolve([{ rows: [[frame, stamp]] }]); else s.latest = [frame, stamp];
     };
     const ws = new WebSocket(`${proto}://${location.host}/frames?tab=${doomTab}${doomGameQ}`);
     ws.binaryType = 'arraybuffer';
     s.ws = ws;
     ws.onopen = () => {
       s.open = true;
-      send({ conns: wantConns, ...(s.view ? { view: s.view } : {}) });
+      send({ conns: wantConns, stamp: true, ...(s.view ? { view: s.view } : {}) });
       post('render_conns', { n: wantConns });
     };
     ws.onerror = () => fail('socket error');
@@ -906,9 +937,11 @@ async function play(user, password, target, nick, guest) {
       const now = performance.now();
       const dv = new DataView(ev.data);
       const ms = dv.getUint32(4) / 100, flags = dv.getUint8(8);
+      // flag 4: the input stamp, a u64 after the 9-byte header
+      const stamp = flags & 4 ? Number(dv.getBigUint64(9)) : null;
       let frame = null;
       if (!(flags & 2)) {
-        frame = new Uint8Array(ev.data, 9);
+        frame = new Uint8Array(ev.data, flags & 4 ? 17 : 9);
         if (flags & 1) {
           const p = s.prev.get(frame.length);
           if (!p) return;                       // cannot undo the XOR: wait for the next
@@ -923,7 +956,7 @@ async function play(user, password, target, nick, guest) {
       }
       const probe = r.probes.find((x) => !x.done);
       if (probe) { probe.first = probe.first || now; probe.last = now; probe.parsed = performance.now(); }
-      deliver(frame);
+      deliver(frame, stamp);
     };
     // pause while the loading screen is up or the automap shows (no frames drawn)
     const pauseTimer = setInterval(() => {
@@ -935,7 +968,7 @@ async function play(user, password, target, nick, guest) {
       if (sfOn() && !automap.on && steps.length === 1) {
         if (steps[0].name === 'camera') return Promise.resolve([{ rows: [] }]);
         if (steps[0].name === r.frameName) {
-          if (s.latest !== null) { const f = s.latest; s.latest = null; return Promise.resolve([{ rows: [[f]] }]); }
+          if (s.latest !== null) { const f = s.latest; s.latest = null; return Promise.resolve([{ rows: [f] }]); }
           return new Promise((resolve, reject) => s.waiters.push({ resolve, reject }));
         }
       }
@@ -993,7 +1026,7 @@ async function play(user, password, target, nick, guest) {
       // request takes it off (it can arrive after the next request left).
       // (a pipelined request has no think time: the relay was not idle)
       r.thinkQ.push(r.doneAt && r.outstanding === 0 ? t0 - r.doneAt : null);
-      let frame, camAt = 0;
+      let frame, stamp = null, camAt = 0;
       const probe = { bytes: 0, first: 0, last: 0, parsed: 0, done: false };
       r.probes.push(probe);
       r.outstanding++;
@@ -1012,6 +1045,7 @@ async function play(user, password, target, nick, guest) {
         const result = await req;
         const last = result[result.length - 1];
         frame = last && last.rows[0] && last.rows[0][0];
+        stamp = !mapUp && last && last.rows[0] && last.rows[0][1] != null ? last.rows[0][1] : null;
       } catch (err) {
         r.outstanding--;
         probe.done = true; r.probes = r.probes.filter((x) => x !== probe);
@@ -1075,6 +1109,7 @@ async function play(user, password, target, nick, guest) {
       seqShown = seq;
       if (frame && frame.length === LOW_BYTES) frame = expandLow(frame);
       if (mapUp) blitRGB(frame); else blit(frame, lut);
+      if (stamp != null) lagDrawn(stamp);
       { const now = performance.now(); if (lastBlitAt) bd.gaps.push(now - lastBlitAt); lastBlitAt = now; }
       stats.frames++; stats.bytes += frame.length; stats.rtt += svc;
       const elapsed = performance.now() - stats.since;
@@ -1137,6 +1172,9 @@ async function play(user, password, target, nick, guest) {
             ].filter(Boolean),
             gapP50: pct(bd.gaps, 0.5),
             gapMax: pct(bd.gaps, 1),
+            // input to picture over the last 200 inputs timed (null: none yet)
+            inputLag: lag.samples.length ? { p50: pct(lag.samples, 0.5), p90: pct(lag.samples, 0.9),
+                                             n: lag.samples.length, raced: lag.raced } : null,
             stall: bd.stall,
           } : null,
         });

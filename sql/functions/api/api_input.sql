@@ -7,13 +7,18 @@ AS $function$
 <<_cs>>
 DECLARE
   playing boolean;
+  taken_as bigint;
   _r1 record;
 BEGIN
 
 playing := false;
+taken_as := 0;
 FOR _r1 IN SELECT (m.state = 'playing') AS x FROM mp_match m
 LOOP playing := _r1.x; END LOOP;
 IF _cs.playing THEN
+-- Returns the input's number (mp_inputs.seq; 0 when not playing): the page
+-- times it to the first frame stamped with it (migration 0005).
+FOR _r1 IN WITH ins AS (
 INSERT INTO mp_inputs
   (map_id,player_thing_id,move_fwd,move_strafe,running,turn_degrees,
    attack_held,weapon_switch_to,use_requested)
@@ -25,9 +30,13 @@ SELECT mp.map_id, mp.player_thing_id,
        COALESCE(api_input.p_fire, FALSE),
        CASE WHEN api_input.p_weapon BETWEEN 1 AND 8 THEN api_input.p_weapon END,
        COALESCE(api_input.p_use, FALSE)
-FROM mp_players mp WHERE mp.role_name = doom_caller();
+FROM mp_players mp WHERE mp.role_name = doom_caller()
+RETURNING seq)
+SELECT MAX(seq) AS s FROM ins
+LOOP taken_as := COALESCE(_r1.s, 0); END LOOP;
 END IF;
-RETURN 1;
+-- capped: past 2^31 the probe stops, the input still goes in
+RETURN LEAST(_cs.taken_as, 2147483647)::int;
 END _cs;
 $function$;
 REVOKE ALL ON FUNCTION doom.api_input(real,real,boolean,real,boolean,integer,boolean) FROM PUBLIC;
