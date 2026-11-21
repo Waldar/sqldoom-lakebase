@@ -739,6 +739,20 @@ vertical AS (
   CROSS JOIN render_settings rs
   CROSS JOIN cam c
 ),
+solid_depth_arr AS MATERIALIZED (
+  -- R_DrawSprite (2026-11-21): a solid wall (one-sided, or a closed door)
+  -- nearer than a sprite hides the sprite's whole column, the sky above the
+  -- wall too. The pixel depth test alone let things in rooms behind a
+  -- courtyard's walls show over its sky (the sky is the farthest depth):
+  -- E1M2's octagon window. The nearest solid wall's depth per column (index
+  -- x + 1), infinity where none.
+  SELECT array_agg(COALESCE(sd.d, 'Infinity'::float8) ORDER BY g.x) AS a
+  FROM render_settings rs
+  CROSS JOIN LATERAL generate_series(0, rs.screen_w - 1) AS g(x)
+  LEFT JOIN (SELECT v.col_x, MIN(v.depth_x) AS d FROM vertical v
+             WHERE v.seg_id IN (SELECT o.seg_id FROM occluders o)
+             GROUP BY v.col_x) sd ON sd.col_x = g.x
+),
 clamped_spans AS (
   SELECT
     t.*,
@@ -1780,6 +1794,9 @@ thing_columns AS (
     SELECT LEAST(c.width - 1, GREATEST(0,
              FLOOR((c.screen_x - c.x_left_f) / c.scale)::int)) AS raw_u
   ) uu
+  CROSS JOIN solid_depth_arr sda
+  -- behind the column's nearest solid wall: not drawn (solid_depth_arr)
+  WHERE c.depth < sda.a[c.screen_x + 1]
   OFFSET 0
 ),
 sprite_lanes AS (
