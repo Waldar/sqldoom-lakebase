@@ -24,11 +24,12 @@ Also done since (2026-11-20):
 * Monsters respawn exactly the set time after death when the rule is on, as items; Nightmare without it keeps Doom's own respawn (12 s or more, at random).
 * Single player keeps health, armor, backpack, ammo, weapons and cheats from one level to the next (its exit only; keys and power-ups go, as Doom's `G_PlayerFinishLevel`; migration `0006`).
 * Quick save / quick load (F6 / F9, one save per player) on Lakebase branches (`docs/DEPLOYMENT.md`, "Quick save and quick load").
+* Single player's screens between levels (2026-11-21, migration `0009`): Doom's map order (E1M3's secret exit to E1M9, E1M9 back to E1M4, E1M8 ends the episode), the intermission (stats counting up with Doom's timings and sounds, then the episode map with splats and the blinking arrow) with `D_INTER`, and the end of Episode 1 (the text typed over `FLOOR4_8`, then `HELP2`) with `D_VICTOR`, then back to the lobby. SQL: `doom_solo_level_end`, `doom_solo_screen_tic`, the view `api_screen_frame` (drawn by the app's frame threads while the referee runs the screens). Deathmatch keeps its rotation and frag table.
 
 Dropped (owner, 2026-11-20):
 
 * Input on the frame socket (step 3): the input's way in is about 14 ms of the 113 ms, the same network trip on either socket, and the database write stays; it would save about 1 ms.
-* Doom's approximate sound distance (`P_AproxDistance`) and the `D_INTER` music between levels.
+* Doom's approximate sound distance (`P_AproxDistance`). (`D_INTER` came back with the intermission, 2026-11-21.)
 
 Open:
 

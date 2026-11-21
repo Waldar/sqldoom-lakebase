@@ -181,6 +181,8 @@ DELETE FROM hitscan_hits WHERE map_id = doom_reset_stage.p_map_id;
 
 DELETE FROM picked_up_items WHERE map_id = doom_reset_stage.p_map_id;
 
+DELETE FROM level_items_taken WHERE map_id = doom_reset_stage.p_map_id;
+
 DELETE FROM item_respawns WHERE map_id = doom_reset_stage.p_map_id;
 
 DELETE FROM pickup_touches WHERE map_id = doom_reset_stage.p_map_id;

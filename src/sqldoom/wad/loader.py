@@ -76,7 +76,9 @@ UI_PATCH_NAMES = (
     # Same patch format as the status bar, so they ride the same loader and
     # get the same transparency mask; the menu is then composited by the very
     # query that composites the HUD.
-    "TITLEPIC", "CREDIT", "HELP1", "M_DOOM",
+    # HELP2: the picture after Episode 1's end text in the shareware game
+    # (F_Drawer; api_screen_frame, 2026-11-21)
+    "TITLEPIC", "CREDIT", "HELP1", "HELP2", "M_DOOM",
     "M_NGAME", "M_OPTION", "M_LOADG", "M_SAVEG", "M_QUITG", "M_RDTHIS",
     "M_NEWG", "M_EPISOD", "M_EPI1", "M_EPI2", "M_EPI3", "M_EPI4",
     "M_SKILL", "M_JKILL", "M_ROUGH", "M_HURT", "M_ULTRA", "M_NMARE",

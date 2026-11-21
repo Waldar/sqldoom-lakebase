@@ -12,6 +12,7 @@ DECLARE
   _r3 record;
   _r4 record;
   _r5 record;
+  _r6 record;
 BEGIN
 
 cur_name := ''; next_id := -1;
@@ -29,6 +30,12 @@ LOOP next_id := _r3.id; END LOOP;
 END IF;
 IF _cs.next_id < 0 THEN FOR _r4 IN SELECT m.map_id AS id FROM mp_match m
 LOOP next_id := _r4.id; END LOOP; END IF;
+-- Single player, after the intermission: Doom's order (doom_solo_level_end:
+-- a secret exit to M9, M9 back to M4, ...), not the rotation (2026-11-21).
+FOR _r6 IN SELECT s.next_map_id AS id FROM screen_state s
+  JOIN mp_match m ON m.mode = 'solo'
+  WHERE s.id = 0 AND s.next_map_id IS NOT NULL
+LOOP next_id := _r6.id; END LOOP;
 FOR _r5 IN SELECT ma.map_id AS id FROM mp_map_request q JOIN maps ma ON ma.name = q.map_name
 LOOP next_id := _r5.id; END LOOP;
 RETURN _cs.next_id;

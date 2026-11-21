@@ -69,6 +69,10 @@ STAMP_SQL = ("(SELECT LEAST(g.inputs_upto, COALESCE((SELECT MIN(i.seq) - 1 FROM 
 # A frame's session, as LBDoom's render threads (engine.py SESSION_SETTINGS):
 # no JIT (planning a frame with it cost more than the frame), one generic plan.
 SESSION_SQL = ("SET jit = off", "SET plan_cache_mode = force_generic_plan", "SET work_mem = '8MB'")
+# Single player's screens between levels (2026-11-21): while the referee runs
+# them (Metrics.screen_kind), every tab of the game draws this view instead of
+# its player's (same format: the palette byte, then 320 x 200 indices).
+SCREEN_VIEW = "api_screen_frame"
 
 
 class FrameStream:
@@ -227,6 +231,8 @@ class FrameStream:
                 view, stamped = self.view, self.stamp
                 if view is None:
                     continue
+                if getattr(self.metrics, "screen_kind", None) and self.metrics.screen_kind():
+                    view, stamped = SCREEN_VIEW, False
                 with self.lock:
                     self.seq += 1
                     seq = self.seq

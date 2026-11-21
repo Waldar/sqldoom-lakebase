@@ -401,12 +401,32 @@ function showBetween(b, local = false) {
   }
 }
 
+// Single player's screens between levels (sqldoom/game/referee.py
+// _solo_screens, 2026-11-21): the app draws them in the frames by itself
+// (api_screen_frame); the page changes the music (D_INTER for the
+// intermission, D_VICTOR for the end of the episode, api_stage_music) and,
+// once the episode's last picture is left, goes back to the lobby.
+let screenKind = null;
+function showScreen(sc) {
+  const kind = (sc && sc.kind) || null;
+  if (kind === screenKind) return;
+  const track = (k) => (k === 'stats' || k === 'next' ? 'inter'
+    : k === 'text' || k === 'picture' || k === 'over' ? 'victor' : null);
+  const was = screenKind;
+  screenKind = kind;
+  if (track(kind) && track(kind) !== track(was)) {
+    game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music_reload' }, '*');
+  }
+  if (kind === 'over' && GAME.id) showMenu('');
+}
+
 // Backend metrics: the referee's tic cost, and the frame cost at the database.
 async function pollMetrics() {
   for (;;) {
     try {
       const m = await (await fetch(`/api/metrics?window=5${gq()}`)).json();
       showBetween(m.between);
+      showScreen(m.screen);
       const t = m.tic || {}, ref = m.referee || {};
       const dot = $('ref-dot');
       dot.className = `dot ${ref.state === 'running' ? 'ok' : 'bad'}`;

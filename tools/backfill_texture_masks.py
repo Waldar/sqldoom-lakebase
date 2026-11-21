@@ -8,6 +8,8 @@
   without it the renderer draws them opaque, their holes black.
 * the STFKILL0-4 face patches (ui_patches), which the loader did not load
   before: Doom's face shows them when hit head-on or holding fire.
+* HELP2 (ui_patches, 2026-11-21): the picture after Episode 1's end text in
+  the shareware game (api_screen_frame; without it, CREDIT is shown).
 
 Data, not code: the installer adds the column, not its content. Run it on
 game-template (new games copy it) and on production (a future template is
@@ -24,7 +26,7 @@ from sqldoom.lakebase.connection import CREDS
 from sqldoom.wad import loader
 from sqldoom.wad.catalogs import materialize_ui_pixels
 
-FACES = tuple(f"STFKILL{i}" for i in range(5))
+FACES = tuple(f"STFKILL{i}" for i in range(5)) + ("HELP2",)
 
 
 def backfill(cur, wad_path, log=print):
@@ -56,7 +58,7 @@ def backfill(cur, wad_path, log=print):
         execute_values(cur, "INSERT INTO ui_patch_pixels (name, dx, dy, palette_index) VALUES %s",
                        [p for p in face_pixels if p[0] not in have], page_size=5000)
         materialize_ui_pixels(cur)
-    log(f"ui_patches: {len(rows)} face patches added ({', '.join(r[0] for r in rows) or 'none missing'})"
+    log(f"ui_patches: {len(rows)} patches added ({', '.join(r[0] for r in rows) or 'none missing'})"
         + (f"; not in the WAD: {', '.join(missing)}" if missing else ""))
 
 

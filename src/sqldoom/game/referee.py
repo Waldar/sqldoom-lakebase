@@ -450,11 +450,10 @@ def _child(samples, dsn, commands=None, env=None):
         if pending is not None or not (page or mode == "solo"):
             return                       # restart, mode switch, multiplayer level end: timed intermission
         if page is None:
-            raw.execute("SELECT COALESCE((SELECT q.map_name FROM mp_map_request q), "
-                        "(SELECT r.map_name FROM mp_rotation r "
-                        " CROSS JOIN mp_match m WHERE r.position > (SELECT r2.position FROM mp_rotation r2 "
-                        " JOIN maps m2 ON m2.name = r2.map_name WHERE m2.map_id = m.map_id LIMIT 1) "
-                        " ORDER BY r.position LIMIT 1), 'the next map')")
+            # the map doom_mp_rotate goes to: the one asked for, single player's
+            # next after its intermission (Doom's order), or the rotation's
+            raw.execute("SELECT COALESCE((SELECT ma.name FROM maps ma WHERE ma.map_id = doom_mp_next_map()), "
+                        "'the next map')")
             page = raw.fetchone()[0]
         _loading_begin(cur, page)
 
@@ -675,6 +674,8 @@ def _child(samples, dsn, commands=None, env=None):
 
     def mp_players(cur, *a, **k):
         out = real_players(cur, *a, **k)
+        if _screen["on"]:
+            _screen_say(None)            # the next map is in: its own view again
         if _BETWEEN:
             try:
                 _between_maps_rotation(cur)
@@ -718,6 +719,101 @@ def _child(samples, dsn, commands=None, env=None):
             print(f"[referee] map change to {name} failed: {exc}", flush=True)
             return False
 
+    # --- single player's screens between levels (2026-11-21) ----------------
+    # A single-player level that ends by its exit (not a map asked for from
+    # the page, a death restart, a rules change or a mode switch): Doom's
+    # intermission (the stats counting up, then the episode map) or, after
+    # E?M8, the end of the episode (the text, then the picture), at 35 Hz with
+    # the world standing still, then the loading screen and the next map
+    # (sql/functions/game/doom_solo_level_end.sql, doom_solo_screen_tic.sql,
+    # sql/views/api_screen_frame.sql). The app's frame threads draw the screen
+    # meanwhile (Metrics.screen); a new press of fire or use moves it on, as
+    # Doom's WI_checkForAccelerate. After the episode's picture the game goes
+    # back to its first map and the page to the lobby.
+    # DOOM_SOLO_SCREENS=0: straight to the loading screen, as before.
+    _SCREENS = os.environ.get("DOOM_SOLO_SCREENS", "1") != "0"
+    _SCREEN_ALONE_S = 30.0               # nobody seated that long: go on without them
+    _screen = {"on": False}
+
+    def _screen_say(kind):
+        _screen["on"] = kind is not None
+        try:
+            samples.put_nowait(("screen", time.time(), kind))
+        except Exception:
+            pass
+
+    def _solo_screens(cur, map_id):
+        raw = getattr(cur, "_cur", cur)
+        raw.execute("SELECT m.mode, m.pending, EXISTS (SELECT 1 FROM mp_map_request) FROM mp_match m LIMIT 1")
+        row = raw.fetchone()
+        if row is None or row[0] != "solo" or row[1] is not None or row[2]:
+            return
+        raw.execute("SELECT doom_solo_level_end(%s)", (map_id,))
+        kind = raw.fetchone()[0]
+        raw.execute("SELECT ma.name, (SELECT n.name FROM maps n WHERE n.map_id = s.next_map_id), s.secret_exit "
+                    "FROM maps ma CROSS JOIN screen_state s WHERE ma.map_id = %s AND s.id = 0", (map_id,))
+        names = raw.fetchone() or (map_id, None, False)
+        print(f"[referee] single player: {names[0]} done" + (" by its secret exit" if names[2] else "")
+              + (f", next {names[1]}: intermission" if kind == "stats" else ": the end of the episode"), flush=True)
+        # the buttons as the last tic had them: a press is a change from up to down
+        raw.execute("SELECT bool_or(attack_held), bool_or(use_requested) FROM game_tic_commands WHERE map_id = %s",
+                    (map_id,))
+        held = raw.fetchone() or (False, False)
+        attack_down, use_down = bool(held[0]), bool(held[1])
+        _screen_say(kind)
+        t0 = next_t = last_beat = time.perf_counter()
+        alone_since = None
+        steps = 0
+        while True:
+            raw.execute("DELETE FROM mp_inputs WHERE map_id = %s RETURNING seq, attack_held, use_requested", (map_id,))
+            accel = False
+            for _, attack, use in sorted(raw.fetchall()):
+                if (attack and not attack_down) or (use and not use_down):
+                    accel = True
+                attack_down, use_down = bool(attack), bool(use)
+            now = time.perf_counter()
+            if now - last_beat >= 1.0:
+                last_beat = now
+                raw.execute("SELECT doom_mp_referee_beat(0)")
+                raw.execute("SELECT count(*) FROM mp_players WHERE map_id = %s AND role_name IS NOT NULL", (map_id,))
+                if int(raw.fetchone()[0]) > 0:
+                    alone_since = None
+                elif alone_since is None:
+                    alone_since = now
+                elif now - alone_since > _SCREEN_ALONE_S:
+                    print("[referee] single player: nobody seated, the screens end", flush=True)
+                    accel = True         # as a press, every tic, until they are over
+            raw.execute("SELECT doom_solo_screen_tic(%s)", (accel,))
+            step = raw.fetchone()[0]
+            steps += 1
+            try:
+                samples.put_nowait(("screen_tic",))
+            except Exception:
+                pass
+            if step != kind:
+                kind = step
+                print(f"[referee] single player: {kind} after {time.perf_counter() - t0:.1f} s", flush=True)
+                if kind not in ("done", "over"):
+                    _screen_say(kind)
+            if kind == "done":
+                break
+            if kind == "over":
+                # the end of the episode: the game starts again from its first map
+                # (fresh, no inventory carried), the page goes back to the lobby
+                raw.execute("INSERT INTO mp_map_request (map_name) SELECT r.map_name FROM mp_rotation r "
+                            "ORDER BY r.position LIMIT 1 ON CONFLICT (id) DO UPDATE "
+                            "SET map_name = EXCLUDED.map_name, requested_at = now()")
+                _screen_say("over")
+                break
+            next_t += 1.0 / 35.0
+            delay = next_t - time.perf_counter()
+            if delay > 0:
+                time.sleep(delay)
+            elif delay < -0.5:
+                next_t = time.perf_counter()
+        print(f"[referee] single player: screens over after {time.perf_counter() - t0:.1f} s, {steps} steps",
+              flush=True)
+
     def mp_tic(*a, **k):
         if _pausable:
             _drain()
@@ -734,9 +830,11 @@ def _child(samples, dsn, commands=None, env=None):
         t0, ok, ended = time.perf_counter(), False, False
         if len(a) >= 3:                  # (cur, map_id, skill, players): the rules' difficulty
             a = (a[0], a[1], _mode["skill"]) + tuple(a[3:])
+        real_end = False
         try:
             result = real_tic(*a, **k)
             ok = True
+            real_end = bool(result)      # the level's own end (its exit), not the page's or a mode's
             if not result and a and _take_map_request(a[0]):
                 result = True            # the game loop: level done -> rotate()
             if _mode["end_level"]:       # mode switch: the intermission, then the same map
@@ -749,6 +847,16 @@ def _child(samples, dsn, commands=None, env=None):
                 samples.put_nowait((time.time(), (time.perf_counter() - t0) * 1000.0, ok))
             except Exception:
                 pass
+            # A single-player level done by its exit: Doom's screens first.
+            if ok and ended and real_end and _SCREENS and len(a) >= 2:
+                try:
+                    _solo_screens(a[0], a[1])
+                except Exception as exc:
+                    try:
+                        getattr(a[0], "_cur", a[0]).connection.rollback()
+                    except Exception:
+                        pass
+                    print(f"[referee] single player screens skipped: {str(exc).splitlines()[0][:160]}", flush=True)
             # The level is over (the game loop rotates next): loading screen
             # instead of the intermission, outside the tic's timing.
             if ok and ended and a and _BETWEEN:
@@ -929,12 +1037,19 @@ class Referee:
                 if item and item[0] == "maint":         # a VACUUM / ANALYZE during play (_maint)
                     self.metrics.maintenance(*item[1:])
                     continue
+                if item and item[0] == "screen_tic":    # a step of the screens between levels
+                    self.metrics.screen_tic()
+                    continue
+                if item and item[0] == "screen":        # they start, change or end (_screen_say)
+                    self.metrics.screen(*item[1:])
+                    continue
                 wall, ms, ok = item
                 if not running:
                     running = True
                     self.metrics.referee_state("running")
                 self.metrics.tic(wall, ms, ok)
             proc.join()
+            self.metrics.screen(time.time(), None)    # a child gone mid-screen: back to the game's view
             self.metrics.referee_state("stopped" if self._stop.is_set() else "exited", proc.exitcode)
             print(f"[referee] child exited with {proc.exitcode} after {time.time() - began:.0f} s", flush=True)
             if self._stop.is_set():

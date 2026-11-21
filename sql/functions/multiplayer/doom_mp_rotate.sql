@@ -32,6 +32,9 @@ IF EXISTS (SELECT 1 FROM mp_match m WHERE m.mode = 'solo' AND m.pending IS NULL)
 END IF;
 nxt := doom_mp_next_map();
 DELETE FROM mp_map_request;
+-- The screens between two single-player levels are over (doom_solo_screen_tic).
+UPDATE screen_state SET next_map_id = NULL, screen = 'game'
+WHERE id = 0 AND (next_map_id IS NOT NULL OR screen IN ('intermission', 'finale'));
 PERFORM doom_mp_apply_mode();
 skill := 3;
 FOR _r1 IN SELECT m.skill AS s FROM mp_match m

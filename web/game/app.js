@@ -1380,6 +1380,9 @@ async function setup() {
         musicOn = !!m.on;
         if (window.doomMusic) window.doomMusic();
       }
+      // single player's screens between levels began: their track (D_INTER,
+      // D_VICTOR) from api_stage_music, as at a map change
+      if (m.action === 'music_reload' && window.doomMusic) window.doomMusic();
       if (m.action === 'music_volume') {
         const v = Number(m.v);
         if (v >= 0 && v <= 1) { musicVolume = v; if (window.doomMusicVolume) window.doomMusicVolume(v); }

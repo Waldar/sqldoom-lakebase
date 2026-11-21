@@ -38,6 +38,11 @@ class Metrics:
         # The loading screen between two maps (sqldoom/game/referee.py _say): the
         # referee's steps and VACUUM lines, shown by the page over the game.
         self._between = {"active": False, "title": "", "lines": [], "since": None, "ended": None}
+        # Single player's screens between levels (referee.py _solo_screens,
+        # 2026-11-21): 'stats', 'next', 'text', 'picture', 'over', or None
+        # while a map plays. The frame threads draw api_screen_frame meanwhile;
+        # the page changes the music and, at 'over', goes back to the lobby.
+        self._screen = {"kind": None, "since": None}
         # Tics committed so far, and a condition notified at each: the app's
         # frame threads start a frame the moment a tic commits
         # (sqldoom.server.frames). The referee's sample arrives right after
@@ -59,6 +64,21 @@ class Metrics:
             with self.tic_done:
                 self.tic_count += 1
                 self.tic_done.notify_all()
+
+    def screen(self, wall, kind):
+        with self._lock:
+            if kind != self._screen["kind"]:
+                self._screen = {"kind": kind, "since": wall}
+
+    def screen_kind(self):
+        return self._screen["kind"]
+
+    def screen_tic(self):
+        """A step of the screens between levels: the frame threads draw it, as
+        a tic (no tic sample: the tic's figures are the game's)."""
+        with self.tic_done:
+            self.tic_count += 1
+            self.tic_done.notify_all()
 
     def maintenance(self, wall0, wall1, label):
         with self._lock:
@@ -125,7 +145,8 @@ class Metrics:
             panes = set(frames) | set(self.connections)
             out = {"at": now, "window_s": window_s, "budget_ms": round(BUDGET_MS, 2),
                    "referee": dict(self.referee),
-                   "between": dict(self._between, lines=list(self._between["lines"]))}
+                   "between": dict(self._between, lines=list(self._between["lines"])),
+                   "screen": dict(self._screen)}
             tic = _stats(tics, now, window_s)
             tic["over_budget"] = sum(1 for t, v in tics if t >= now - window_s and v > BUDGET_MS)
             tic["failed"] = failed

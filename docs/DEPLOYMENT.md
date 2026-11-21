@@ -156,6 +156,15 @@ Everything the game runs in Postgres is a plain file under `sql/`, installed by 
 
 **To change the SQL:** edit the file and deploy (new games get it; running games keep theirs). A change to a table is a new migration, never an edit of an applied one. To try a change first: create a branch from `game-template`, run `sqldoom.db.install` on it (from a notebook, as in step 5), play or bench it there (`tools/bench.py`), delete the branch.
 
+**Data the installer does not add.** Some changes need WAD content or rendered audio on a database loaded before them. Run these on `game-template` (new games copy it), on the first spare made after a template refresh, and on `production` (a future template is made from it); both can run again:
+
+* `tools/backfill_texture_masks.py`: the see-through textures' masks and the `STFKILL` faces (migration `0007`), and `HELP2`, the picture after Episode 1's end text (2026-11-21).
+* `tools/render_music.py`: every track without audio, including `D_INTER` and `D_VICTOR`, the music of single player's screens between levels (2026-11-21).
+
+## Single player's screens between levels
+
+A single-player level that ends by its exit runs Doom's screens before the loading screen (`sqldoom/game/referee.py` `_solo_screens`): `doom_solo_level_end` works out the exit (secret or not), the next map in Doom's order and the figures; `doom_solo_screen_tic` steps the intermission (or, after E1M8, the episode's end) at 35 Hz with the world standing still; the app's frame threads draw `api_screen_frame` meanwhile, and the page plays `D_INTER` / `D_VICTOR` (`api_stage_music`). Fire or use moves the screens on. After the episode's picture the game goes back to its first map and the page to the lobby. `DOOM_SOLO_SCREENS=0` (app env) skips them: straight to the loading screen and the rotation's next map, as before.
+
 ## Quick save and quick load (branches)
 
 Single player, one save per player (`lobby.saves`; `sqldoom/lakebase/games.py`). A save is a child branch `s-<id>` of the game's branch, made with no expiry; its compute is disabled at once, so a save costs storage only. A load is a new game branch `g-<id>` made from the save; the game loop starts with `DOOM_CONTINUE=1` and goes on from the saved tic (no fresh level), and the seat is handed to the loading tab. A save made before a deploy that changed the game's SQL is brought up to date on load (`sqldoom.db.install`).

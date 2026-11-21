@@ -67,6 +67,11 @@ IF _cs.due >= 0 THEN
   WHERE t.map_id = doom_cs_item_respawn.p_map_id AND t.id = _cs.due
   ON CONFLICT (map_id, event_key) DO NOTHING;
 
+  -- the intermission's Items count keeps it (migration 0009)
+  INSERT INTO level_items_taken (map_id, thing_id, taken)
+  SELECT pu.map_id, pu.thing_id, 1 FROM picked_up_items pu
+  WHERE pu.map_id = doom_cs_item_respawn.p_map_id AND pu.thing_id = _cs.due
+  ON CONFLICT (map_id, thing_id) DO UPDATE SET taken = level_items_taken.taken + 1;
   DELETE FROM picked_up_items WHERE map_id = doom_cs_item_respawn.p_map_id AND thing_id = _cs.due;
   DELETE FROM item_respawns WHERE map_id = doom_cs_item_respawn.p_map_id AND thing_id = _cs.due;
 END IF;

@@ -153,8 +153,13 @@ def _render_wav(lib, midi, sf2, wav_path):
         lib.delete_fluid_settings(settings)
 
 
+# The intermission's and the episode end's tracks (api_stage_music, 2026-11-21)
+SCREEN_TRACKS = ("D_INTER", "D_VICTOR")
+
+
 def render_missing(cur, every=False, log=print):
-    """Render the tracks the maps use (map_music) that have no audio yet, on
+    """Render the tracks the game plays (the maps', map_music, and single
+    player's screens between levels, SCREEN_TRACKS) that have no audio yet, on
     the connection's branch (cur: search_path with doom, a transaction the
     caller commits). every=True: those with audio too. Returns (rendered,
     failed names); raises RuntimeError when rendering cannot run."""
@@ -163,9 +168,9 @@ def render_missing(cur, every=False, log=print):
     why = unavailable_reason()
     if why:
         raise RuntimeError(why)
-    cur.execute("SELECT a.name, a.midi_data FROM music_assets a WHERE a.name IN "
-                "(SELECT music_name FROM map_music)" + ("" if every else " AND a.audio_data IS NULL")
-                + " ORDER BY a.name")
+    cur.execute("SELECT a.name, a.midi_data FROM music_assets a WHERE (a.name IN "
+                "(SELECT music_name FROM map_music) OR a.name = ANY(%s))"
+                + ("" if every else " AND a.audio_data IS NULL") + " ORDER BY a.name", (list(SCREEN_TRACKS),))
     todo = [(name, bytes(data)) for name, data in cur.fetchall()]
     if not todo:
         log("every track the maps use has audio already")
