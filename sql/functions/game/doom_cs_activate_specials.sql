@@ -161,24 +161,40 @@ SELECT t.map_id,t.sector_id,t.line_id,
 FROM targets_unique t
 JOIN line_special_defs d ON d.special=t.special
 ON CONFLICT (map_id,sector_id) DO UPDATE SET
-  -- A completed manual raiser (direction=2) is sitting closed, so a fresh
-  -- use must start it opening again. Active doors retain Doom's use-toggle:
-  -- closing reverses upward; opening/waiting starts closing. Only a manual
-  -- door does this; any other mover in the sector is left alone.
-  source_line_id=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
+  -- A finished mover of any kind (direction=2) is replaced by the door
+  -- whole: a manual raiser sitting closed opens again, and so does a remote
+  -- door (2026-11-21: a repeatable door switch or walk-over line worked once,
+  -- and a door could not open on a sector that had moved as something
+  -- else). Active doors retain Doom's use-toggle: closing reverses upward;
+  -- opening/waiting starts closing. Only a manual door does this; any other
+  -- moving mover in the sector is left alone.
+  mover_type=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.mover_type ELSE sector_movers.mover_type END,
+  plane=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.plane ELSE sector_movers.plane END,
+  bottom_height=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.bottom_height ELSE sector_movers.bottom_height END,
+  top_height=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.top_height ELSE sector_movers.top_height END,
+  speed=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.speed ELSE sector_movers.speed END,
+  move_carry=CASE WHEN sector_movers.direction=2 THEN 0 ELSE sector_movers.move_carry END,
+  wait_tics=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.wait_tics ELSE sector_movers.wait_tics END,
+  next_floor=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.next_floor ELSE sector_movers.next_floor END,
+  target_floor_tex=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.target_floor_tex ELSE sector_movers.target_floor_tex END,
+  crush=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.crush ELSE sector_movers.crush END,
+  source_line_id=CASE WHEN sector_movers.direction=2
+                        OR (EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling')
                       THEN EXCLUDED.source_line_id ELSE sector_movers.source_line_id END,
-  direction=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
-                 THEN CASE WHEN sector_movers.direction IN (-1,2) THEN 1 ELSE -1 END
+  direction=CASE WHEN sector_movers.direction=2 THEN EXCLUDED.direction
+                 WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
+                 THEN CASE WHEN sector_movers.direction=-1 THEN 1 ELSE -1 END
                  ELSE sector_movers.direction END,
-  countdown=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
+  countdown=CASE WHEN sector_movers.direction=2
+                   OR (EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling')
                  THEN 0 ELSE sector_movers.countdown END,
   -- No next height marks a starting door (doom_cs_doors plays its sound):
   -- only a finished one restarts; re-using a moving door turns it round
   -- silently, as EV_VerticalDoor (2026-11-20).
-  next_ceiling=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
-                     AND sector_movers.direction=2
+  next_ceiling=CASE WHEN sector_movers.direction=2
                     THEN NULL ELSE sector_movers.next_ceiling END,
-  moved_this_tick=CASE WHEN EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling'
+  moved_this_tick=CASE WHEN sector_movers.direction=2
+                         OR (EXCLUDED.mover_type='door_manual_raise' AND sector_movers.plane='ceiling')
                        THEN FALSE ELSE sector_movers.moved_this_tick END;
 END IF;
 IF (_cs.flags & 4) <> 0 THEN
@@ -232,8 +248,21 @@ INSERT INTO sector_movers
 SELECT map_id,sector_id,line_id,mover_type,'floor',direction,
   LEAST(floor_height,destination),floor_height,
   speed,0,0,NULL,NULL,model_tex,FALSE
-FROM model WHERE destination<floor_height
-ON CONFLICT (map_id,sector_id) DO NOTHING;
+-- one row a sector: ON CONFLICT DO UPDATE may not touch a row twice
+FROM (SELECT DISTINCT ON (map_id,sector_id) * FROM model WHERE destination<floor_height
+      ORDER BY map_id,sector_id,line_id) model
+-- A finished mover (direction 2: its row stays) does not keep the sector:
+-- it is replaced; a moving one does (EV_DoFloor's `if (sec->specialdata)
+-- continue`). 2026-11-21: DO NOTHING here left a sector that had moved once
+-- (a door, a floor) deaf to every later floor, raise, stairs, donut and
+-- ceiling trigger of the level.
+ON CONFLICT (map_id,sector_id) DO UPDATE SET
+  source_line_id=EXCLUDED.source_line_id,mover_type=EXCLUDED.mover_type,plane=EXCLUDED.plane,
+  direction=EXCLUDED.direction,bottom_height=EXCLUDED.bottom_height,top_height=EXCLUDED.top_height,
+  speed=EXCLUDED.speed,move_carry=0,wait_tics=EXCLUDED.wait_tics,countdown=EXCLUDED.countdown,
+  next_ceiling=EXCLUDED.next_ceiling,next_floor=EXCLUDED.next_floor,
+  target_floor_tex=EXCLUDED.target_floor_tex,moved_this_tick=EXCLUDED.moved_this_tick,crush=EXCLUDED.crush
+WHERE sector_movers.direction=2;
 END IF;
 IF (_cs.flags & 8) <> 0 THEN
 -- Down-wait-up lifts.
@@ -291,10 +320,17 @@ SELECT map_id,sector_id,line_id,mover_type,'floor',direction,
        ELSE floor_height END,
   speed,wait_tics,0,NULL,NULL,NULL,FALSE
 FROM targets_unique
+-- A finished mover of any kind is replaced by the lift whole (2026-11-21:
+-- only its direction was reset, so a lift on a sector that had last moved
+-- as something else ran that mover's heights and type); a moving one keeps
+-- the sector (EV_DoPlat).
 ON CONFLICT (map_id,sector_id) DO UPDATE SET
-  source_line_id=EXCLUDED.source_line_id,direction=-1,countdown=0,
-  next_floor=NULL,moved_this_tick=FALSE
-WHERE sector_movers.direction=2 AND sector_movers.plane='floor';
+  source_line_id=EXCLUDED.source_line_id,mover_type=EXCLUDED.mover_type,plane=EXCLUDED.plane,
+  direction=EXCLUDED.direction,bottom_height=EXCLUDED.bottom_height,top_height=EXCLUDED.top_height,
+  speed=EXCLUDED.speed,move_carry=0,wait_tics=EXCLUDED.wait_tics,countdown=EXCLUDED.countdown,
+  next_ceiling=EXCLUDED.next_ceiling,next_floor=EXCLUDED.next_floor,
+  target_floor_tex=EXCLUDED.target_floor_tex,moved_this_tick=EXCLUDED.moved_this_tick,crush=EXCLUDED.crush
+WHERE sector_movers.direction=2;
 END IF;
 IF (_cs.flags & 16) <> 0 THEN
 -- S1 donut: lower the tagged pillar and raise its surrounding ring to the
@@ -354,8 +390,21 @@ INSERT INTO sector_movers
    next_ceiling,next_floor,target_floor_tex,moved_this_tick)
 SELECT map_id,sector_id,line_id,mover_type,'floor',direction,
   bottom_height,top_height,1,0,0,NULL,NULL,target_tex,FALSE
-FROM motions WHERE bottom_height<>top_height
-ON CONFLICT (map_id,sector_id) DO NOTHING;
+-- one row a sector: ON CONFLICT DO UPDATE may not touch a row twice
+FROM (SELECT DISTINCT ON (map_id,sector_id) * FROM motions WHERE bottom_height<>top_height
+      ORDER BY map_id,sector_id,line_id) motions
+-- A finished mover (direction 2: its row stays) does not keep the sector:
+-- it is replaced; a moving one does (EV_DoFloor's `if (sec->specialdata)
+-- continue`). 2026-11-21: DO NOTHING here left a sector that had moved once
+-- (a door, a floor) deaf to every later floor, raise, stairs, donut and
+-- ceiling trigger of the level.
+ON CONFLICT (map_id,sector_id) DO UPDATE SET
+  source_line_id=EXCLUDED.source_line_id,mover_type=EXCLUDED.mover_type,plane=EXCLUDED.plane,
+  direction=EXCLUDED.direction,bottom_height=EXCLUDED.bottom_height,top_height=EXCLUDED.top_height,
+  speed=EXCLUDED.speed,move_carry=0,wait_tics=EXCLUDED.wait_tics,countdown=EXCLUDED.countdown,
+  next_ceiling=EXCLUDED.next_ceiling,next_floor=EXCLUDED.next_floor,
+  target_floor_tex=EXCLUDED.target_floor_tex,moved_this_tick=EXCLUDED.moved_this_tick,crush=EXCLUDED.crush
+WHERE sector_movers.direction=2;
 END IF;
 IF (_cs.flags & 32) <> 0 THEN
 -- Remember visible SW1* texture substitutions. Repeatable buttons restore
@@ -525,9 +574,22 @@ INSERT INTO sector_movers
 SELECT map_id,sector_id,line_id,mover_type,'floor',direction,
   floor_height,destination,speed,0,0,NULL,NULL,
   CASE WHEN change_tex THEN model_tex END,FALSE,crush
-FROM model
-WHERE destination IS NOT NULL AND destination>floor_height
-ON CONFLICT (map_id,sector_id) DO NOTHING;
+-- one row a sector: ON CONFLICT DO UPDATE may not touch a row twice
+FROM (SELECT DISTINCT ON (map_id,sector_id) * FROM model
+      WHERE destination IS NOT NULL AND destination>floor_height
+      ORDER BY map_id,sector_id,line_id) model
+-- A finished mover (direction 2: its row stays) does not keep the sector:
+-- it is replaced; a moving one does (EV_DoFloor's `if (sec->specialdata)
+-- continue`). 2026-11-21: DO NOTHING here left a sector that had moved once
+-- (a door, a floor) deaf to every later floor, raise, stairs, donut and
+-- ceiling trigger of the level.
+ON CONFLICT (map_id,sector_id) DO UPDATE SET
+  source_line_id=EXCLUDED.source_line_id,mover_type=EXCLUDED.mover_type,plane=EXCLUDED.plane,
+  direction=EXCLUDED.direction,bottom_height=EXCLUDED.bottom_height,top_height=EXCLUDED.top_height,
+  speed=EXCLUDED.speed,move_carry=0,wait_tics=EXCLUDED.wait_tics,countdown=EXCLUDED.countdown,
+  next_ceiling=EXCLUDED.next_ceiling,next_floor=EXCLUDED.next_floor,
+  target_floor_tex=EXCLUDED.target_floor_tex,moved_this_tick=EXCLUDED.moved_this_tick,crush=EXCLUDED.crush
+WHERE sector_movers.direction=2;
 
 UPDATE sectors s
 SET floor_height=q.dest
@@ -546,7 +608,8 @@ FROM (
   GROUP BY sec.map_id,sec.id,sec.floor_height,sec.ceil_height,d.height_target
 ) q
 WHERE s.map_id=q.map_id AND s.id=q.id AND q.dest<q.floor_height
-  AND NOT EXISTS (SELECT 1 FROM sector_movers sm WHERE sm.map_id=s.map_id AND sm.sector_id=s.id);
+  -- a finished mover's row does not keep the sector (2026-11-21)
+  AND NOT EXISTS (SELECT 1 FROM sector_movers sm WHERE sm.map_id=s.map_id AND sm.sector_id=s.id AND sm.direction<>2);
 END IF;
 IF (_cs.flags & 256) <> 0 THEN
 -- Stairs (special 8). Doom walks OUTWARD IN A LINE from the tagged
@@ -595,10 +658,25 @@ INSERT INTO sector_movers
    next_ceiling,next_floor,target_floor_tex,moved_this_tick)
 SELECT ch.map_id,ch.sector_id,ch.line_id,'floor_raise','floor',1,
   s.floor_height,ch.destination::smallint,ch.speed,0,0,NULL,NULL,NULL,FALSE
-FROM chain ch
+-- one row a sector (two stairs may reach the same one; the first step
+-- keeps it): ON CONFLICT DO UPDATE may not touch a row twice
+FROM (SELECT DISTINCT ON (c.map_id,c.sector_id) c.* FROM chain c
+      JOIN sectors s0 ON s0.map_id=c.map_id AND s0.id=c.sector_id
+      WHERE c.destination>s0.floor_height
+      ORDER BY c.map_id,c.sector_id,c.step,c.line_id) ch
 JOIN sectors s ON s.map_id=ch.map_id AND s.id=ch.sector_id
-WHERE ch.destination>s.floor_height
-ON CONFLICT (map_id,sector_id) DO NOTHING;
+-- A finished mover (direction 2: its row stays) does not keep the sector:
+-- it is replaced; a moving one does (EV_DoFloor's `if (sec->specialdata)
+-- continue`). 2026-11-21: DO NOTHING here left a sector that had moved once
+-- (a door, a floor) deaf to every later floor, raise, stairs, donut and
+-- ceiling trigger of the level.
+ON CONFLICT (map_id,sector_id) DO UPDATE SET
+  source_line_id=EXCLUDED.source_line_id,mover_type=EXCLUDED.mover_type,plane=EXCLUDED.plane,
+  direction=EXCLUDED.direction,bottom_height=EXCLUDED.bottom_height,top_height=EXCLUDED.top_height,
+  speed=EXCLUDED.speed,move_carry=0,wait_tics=EXCLUDED.wait_tics,countdown=EXCLUDED.countdown,
+  next_ceiling=EXCLUDED.next_ceiling,next_floor=EXCLUDED.next_floor,
+  target_floor_tex=EXCLUDED.target_floor_tex,moved_this_tick=EXCLUDED.moved_this_tick,crush=EXCLUDED.crush
+WHERE sector_movers.direction=2;
 END IF;
 IF (_cs.flags & 512) <> 0 THEN
 -- W1 light change.
@@ -834,7 +912,18 @@ SELECT map_id,sector_id,line_id,mover_type,'ceiling',direction,
 FROM targets_unique
 WHERE (direction=1 AND COALESCE(highest_ceiling,ceil_height)>ceil_height)
    OR (direction=-1 AND ceil_height>CASE height_target WHEN 'floor8' THEN floor_height+8 ELSE floor_height END)
-ON CONFLICT (map_id,sector_id) DO NOTHING;
+-- A finished mover (direction 2: its row stays) does not keep the sector:
+-- it is replaced; a moving one does (EV_DoFloor's `if (sec->specialdata)
+-- continue`). 2026-11-21: DO NOTHING here left a sector that had moved once
+-- (a door, a floor) deaf to every later floor, raise, stairs, donut and
+-- ceiling trigger of the level.
+ON CONFLICT (map_id,sector_id) DO UPDATE SET
+  source_line_id=EXCLUDED.source_line_id,mover_type=EXCLUDED.mover_type,plane=EXCLUDED.plane,
+  direction=EXCLUDED.direction,bottom_height=EXCLUDED.bottom_height,top_height=EXCLUDED.top_height,
+  speed=EXCLUDED.speed,move_carry=0,wait_tics=EXCLUDED.wait_tics,countdown=EXCLUDED.countdown,
+  next_ceiling=EXCLUDED.next_ceiling,next_floor=EXCLUDED.next_floor,
+  target_floor_tex=EXCLUDED.target_floor_tex,moved_this_tick=EXCLUDED.moved_this_tick,crush=EXCLUDED.crush
+WHERE sector_movers.direction=2;
 END IF;
 IF (_cs.flags & 4096) <> 0 THEN
 -- Crushers: the ceiling runs between its height and eight above the floor

@@ -1985,7 +1985,7 @@ view_lanes AS NOT MATERIALIZED (
   UNION ALL
   SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL, NULL FROM plane_lanes
   UNION ALL
-  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL, NULL FROM psprite_lanes
+  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, fk, fm FROM psprite_lanes
   UNION ALL
   SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL, NULL FROM message_lanes
 ),
@@ -2035,7 +2035,12 @@ psprite_layer_keys AS (
                   WHEN p.fullbright THEN 0
                   ELSE doom_light_index(ps.light_level, wr.extra_light,
                                         rs.light_psprite_bias)
-             END)::bigint << 8) AS key_hi
+             END)::bigint << 8) AS key_hi,
+         -- R_DrawPSprite: the weapon is drawn with the fuzz while the blur
+         -- sphere lasts, flickering in its last 4 seconds
+         -- (`powers[pw_invisibility] > 4*32 || powers[pw_invisibility] & 8`;
+         -- 2026-11-21, owner: "so I know visually it's in effect")
+         COALESCE((SELECT ms.invis_tics > 128 OR (ms.invis_tics & 8) <> 0 FROM me_state ms), FALSE) AS fuzz
   FROM psprite_patches p
   CROSS JOIN player_sector ps CROSS JOIN weapon_runtime wr
   CROSS JOIN render_settings rs
@@ -2043,26 +2048,43 @@ psprite_layer_keys AS (
 psprite_lanes AS (
   -- The weapon's pixels, sixteen of a column a row (see wall_lanes): the inner
   -- query finds each lane's offset into the patch (NULL off it), the outer
-  -- keeps the opaque ones.
+  -- keeps the opaque ones. With the blur sphere (fuzz) they are not pixels
+  -- but a spectre's fragments (fk, the layer's key; fm, the rows it covers,
+  -- bit j: row 16g+j), which view_words draws as Doom's fuzz: the key is
+  -- below every view fragment's, so it is always in front, and above the
+  -- message's, which stays on top. (Its own pm column and aggregate cost
+  -- 2.9 ms a frame; sharing the spectres': a spectre hidden by a wall in
+  -- the same 16 rows of a column as the weapon shimmers there too.)
   SELECT q.x, q.g,
-    CASE WHEN GET_BYTE(q.mask, q.o0) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o0)::bigint END AS k0,
-    CASE WHEN GET_BYTE(q.mask, q.o1) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o1)::bigint END AS k1,
-    CASE WHEN GET_BYTE(q.mask, q.o2) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o2)::bigint END AS k2,
-    CASE WHEN GET_BYTE(q.mask, q.o3) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o3)::bigint END AS k3,
-    CASE WHEN GET_BYTE(q.mask, q.o4) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o4)::bigint END AS k4,
-    CASE WHEN GET_BYTE(q.mask, q.o5) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o5)::bigint END AS k5,
-    CASE WHEN GET_BYTE(q.mask, q.o6) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o6)::bigint END AS k6,
-    CASE WHEN GET_BYTE(q.mask, q.o7) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o7)::bigint END AS k7,
-    CASE WHEN GET_BYTE(q.mask, q.o8) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o8)::bigint END AS k8,
-    CASE WHEN GET_BYTE(q.mask, q.o9) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o9)::bigint END AS k9,
-    CASE WHEN GET_BYTE(q.mask, q.o10) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o10)::bigint END AS k10,
-    CASE WHEN GET_BYTE(q.mask, q.o11) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o11)::bigint END AS k11,
-    CASE WHEN GET_BYTE(q.mask, q.o12) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o12)::bigint END AS k12,
-    CASE WHEN GET_BYTE(q.mask, q.o13) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o13)::bigint END AS k13,
-    CASE WHEN GET_BYTE(q.mask, q.o14) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o14)::bigint END AS k14,
-    CASE WHEN GET_BYTE(q.mask, q.o15) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o15)::bigint END AS k15
+    CASE WHEN q.fuzz THEN q.key_hi END AS fk,
+    CASE WHEN q.fuzz THEN
+        (CASE WHEN GET_BYTE(q.mask, q.o0) <> 0 THEN 1 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o1) <> 0 THEN 2 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o2) <> 0 THEN 4 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o3) <> 0 THEN 8 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o4) <> 0 THEN 16 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o5) <> 0 THEN 32 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o6) <> 0 THEN 64 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o7) <> 0 THEN 128 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o8) <> 0 THEN 256 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o9) <> 0 THEN 512 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o10) <> 0 THEN 1024 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o11) <> 0 THEN 2048 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o12) <> 0 THEN 4096 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o13) <> 0 THEN 8192 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(q.mask, q.o14) <> 0 THEN 16384 ELSE 0 END) | (CASE WHEN GET_BYTE(q.mask, q.o15) <> 0 THEN 32768 ELSE 0 END)
+    END AS fm,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o0) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o0)::bigint END AS k0,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o1) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o1)::bigint END AS k1,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o2) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o2)::bigint END AS k2,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o3) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o3)::bigint END AS k3,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o4) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o4)::bigint END AS k4,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o5) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o5)::bigint END AS k5,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o6) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o6)::bigint END AS k6,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o7) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o7)::bigint END AS k7,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o8) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o8)::bigint END AS k8,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o9) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o9)::bigint END AS k9,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o10) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o10)::bigint END AS k10,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o11) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o11)::bigint END AS k11,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o12) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o12)::bigint END AS k12,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o13) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o13)::bigint END AS k13,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o14) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o14)::bigint END AS k14,
+    CASE WHEN NOT q.fuzz AND GET_BYTE(q.mask, q.o15) <> 0 THEN q.key_hi | GET_BYTE(q.pixels, q.o15)::bigint END AS k15
   FROM (
-    SELECT c.x, c.g, c.pixels, c.mask, c.key_hi,
+    SELECT c.x, c.g, c.pixels, c.mask, c.key_hi, c.fuzz,
            CASE WHEN (c.g*16+0) BETWEEN c.ya AND c.yb THEN ((c.g*16+0) - c.y0)*c.width + (c.x - c.x0) END AS o0,
            CASE WHEN (c.g*16+1) BETWEEN c.ya AND c.yb THEN ((c.g*16+1) - c.y0)*c.width + (c.x - c.x0) END AS o1,
            CASE WHEN (c.g*16+2) BETWEEN c.ya AND c.yb THEN ((c.g*16+2) - c.y0)*c.width + (c.x - c.x0) END AS o2,
@@ -2080,7 +2102,7 @@ psprite_lanes AS (
            CASE WHEN (c.g*16+14) BETWEEN c.ya AND c.yb THEN ((c.g*16+14) - c.y0)*c.width + (c.x - c.x0) END AS o14,
            CASE WHEN (c.g*16+15) BETWEEN c.ya AND c.yb THEN ((c.g*16+15) - c.y0)*c.width + (c.x - c.x0) END AS o15
     FROM (SELECT l.*, generate_series(l.ya >> 4, l.yb >> 4) AS g
-          FROM (SELECT k.pixels, k.mask, k.width, k.x0, k.y0, k.ya, k.yb, k.key_hi,
+          FROM (SELECT k.pixels, k.mask, k.width, k.x0, k.y0, k.ya, k.yb, k.key_hi, k.fuzz,
                        generate_series((GREATEST(0, k.x0)) + ((GREATEST(0, k.x0)) & 1), LEAST(rs.screen_w - 1, k.x0 + k.width - 1), 2) AS x
                 FROM psprite_layer_keys k CROSS JOIN render_settings rs) l) c
     OFFSET 0
@@ -2432,7 +2454,12 @@ view_words AS (
   -- drawn), through COLORMAP 6. That pixel is the one without spectres
   -- (k's MIN), where Doom reads the screen, on which a spectre drawn first
   -- is sometimes already there. Within the cell: at its first and last row
-  -- the other neighbour. Spectres in two columns of their own, not a test
+  -- the other neighbour. Not on the view's first and last rows, which keep
+  -- what is behind (R_DrawFuzzColumn: `if (!dc_yl) dc_yl = 1; if (dc_yh ==
+  -- viewheight-1) dc_yh = viewheight - 2;`): row 0 is lane 0 of band 0, row
+  -- 167 lane 7 of band 10, the only lanes tested (a test on all 16 lanes
+  -- cost 1.6 ms a frame). The weapon with the blur sphere
+  -- (psprite_lanes) is drawn the same, under the pickup message. Spectres in two columns of their own, not a test
   -- in every aggregate (7-10 ms a frame, spectre or none) nor sixteen
   -- columns (2.5 ms). The palette is read through scalar subqueries, evaluated
   -- once a frame: a join would cost a pass per cell. The entry's number,
@@ -2440,7 +2467,7 @@ view_words AS (
   -- the cell's column goes in a row of its block: 8 * (7 - column).
   SELECT ((cell >> 7) << 4) | (cell & 15) AS block,
          (7 - ((cell >> 4) & 7)) << 3 AS sh,
-         COALESCE(CASE WHEN (bit_or(fm) & 1) <> 0 AND MIN(fk) < COALESCE(MIN(k0), 9223372036854775807)
+         COALESCE(CASE WHEN (bit_or(fm) & 1) <> 0 AND MIN(fk) < COALESCE(MIN(k0), 9223372036854775807) AND (cell & 15) <> 0
                  THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 0 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
                       THEN MIN(k1) ELSE MIN(k1) END & 16383)::int))
                  ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k0) & 16383)::int) END, 0)::bigint AS b0,
@@ -2468,7 +2495,7 @@ view_words AS (
                  THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 6 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
                       THEN MIN(k7) ELSE MIN(k5) END & 16383)::int))
                  ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k6) & 16383)::int) END, 0)::bigint AS b6,
-         COALESCE(CASE WHEN (bit_or(fm) & 128) <> 0 AND MIN(fk) < COALESCE(MIN(k7), 9223372036854775807)
+         COALESCE(CASE WHEN (bit_or(fm) & 128) <> 0 AND MIN(fk) < COALESCE(MIN(k7), 9223372036854775807) AND (cell & 15) <> 10
                  THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 7 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
                       THEN MIN(k8) ELSE MIN(k6) END & 16383)::int))
                  ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k7) & 16383)::int) END, 0)::bigint AS b7,
