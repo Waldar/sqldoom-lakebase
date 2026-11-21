@@ -50,7 +50,9 @@
   body.embed { min-height: 100vh; overflow: hidden; background: #000; }
   body.embed header, body.embed footer, body.embed #help, body.embed #connect, body.embed #status, body.embed #stats { display: none; }
   body.embed #stage { width: 100vw; height: 100vh; aspect-ratio: auto; border: 0; }
-  body.embed canvas { object-fit: contain; }
+  /* fill, not contain (2026-11-21): the host page gives the frame its shape,
+     16:10 (square pixels) or 4:3 (Doom's monitors, its 4:3 box) */
+  body.embed canvas { object-fit: fill; }
   /* The host shows the scoreboard next to the screen, from the spectator's SQL. */
   body.embed #scoreboard { display: none; }
 </style>

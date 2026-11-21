@@ -102,6 +102,9 @@
   #music-vol { width: 90px; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent;
                accent-color: var(--lava2); }
   .pane iframe { width: 100%; aspect-ratio: 16 / 10; display: block; border: 0; }
+  /* 4:3 (host.js, 2026-11-21): Doom's 320x200 as a 1993 monitor showed it,
+     each pixel 1.2 times taller than wide; off: square pixels, 16:10 */
+  body.aspect-43 .pane iframe { aspect-ratio: 4 / 3; }
   /* end of a deathmatch: stay or go solo (host.js, game modes) */
   #dm-choice { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 3;
                display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 6px;
@@ -149,6 +152,7 @@
   .pane:fullscreen, body.low-detail .pane:fullscreen { display: flex; align-items: center; justify-content: center;
                      border: 0; max-width: none; border-radius: 0; }
   .pane:fullscreen iframe { height: 100%; width: auto; max-width: 100%; aspect-ratio: 16 / 10; }
+  body.aspect-43 .pane:fullscreen iframe { aspect-ratio: 4 / 3; }
   #help { color: var(--dim); font-size: 12px; padding: 10px 2px; }
   #help kbd { background: var(--card); border: 1px solid var(--line); border-radius: 3px;
               padding: 0 5px; color: var(--text); font: 11px var(--mono); }
@@ -265,6 +269,7 @@
     <button data-n="auto" title="Aims at 35 frames/s with the fewest connections: one fewer when the game slows down (under 32 tics/s or p75 over 32 ms over 3 s); one more when the connections cannot take every frame slot (pool full over 5%), undone if it does not help; one fewer after 10 s with more than needed">auto</button><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button>
   </div>
   <label class="btn ghost" title="Render every other column (160 instead of 320), doubled in the browser. About 33% faster frames, half the bandwidth."><input type="checkbox" id="low-detail"> Low detail</label>
+  <label class="btn ghost" title="The original shape: Doom's 320x200 stretched to 4:3, as the monitors of 1993 showed it (each pixel 1.2 times taller than wide). Off: square pixels, 16:10. Display only: the frames and their cost do not change."><input type="checkbox" id="aspect-43"> 4:3</label>
   <label class="btn ghost" id="music-vol-wrap" hidden title="Music volume"><span id="music-note">&#9835;</span> Music <input type="range" id="music-vol" min="0" max="100" step="5" value="60" aria-label="Music volume, 0 for no music"></label>
   <label class="btn ghost" title="Run all the time; hold Shift to walk. Off: Shift runs, as in Doom without always run."><input type="checkbox" id="always-run"> Always run</label>
   <button id="fullscreen" class="btn ghost" title="Fullscreen game">&#9974;&nbsp; Fullscreen</button>

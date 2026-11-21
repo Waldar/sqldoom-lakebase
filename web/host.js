@@ -11,7 +11,9 @@ function fitPane() {
   if (!pane || document.fullscreenElement) return;
   const top = pane.getBoundingClientRect().top + window.scrollY;
   const h = window.innerHeight - top - 14;
-  document.documentElement.style.setProperty('--pane-fit', `${Math.max(400, Math.floor(h * 1.6) + 2)}px`);
+  // the pane's width for that height: 16:10, or 4:3 with the 4:3 box
+  const ratio = document.body.classList.contains('aspect-43') ? 4 / 3 : 1.6;
+  document.documentElement.style.setProperty('--pane-fit', `${Math.max(400, Math.floor(h * ratio) + 2)}px`);
 }
 window.addEventListener('resize', fitPane);
 window.addEventListener('load', fitPane);
@@ -226,6 +228,21 @@ ldBox.addEventListener('change', () => {
   localStorage.setItem('sqldoom.lowDetail', ldBox.checked ? '1' : '0');
   document.body.classList.toggle('low-detail', ldBox.checked);
   sendLowDetail();
+  game.focus();
+});
+
+// 4:3 (2026-11-21): the frame shown as Doom's monitors showed 320x200, its
+// pixels 1.2 times taller than wide; off, square pixels (16:10). Only the
+// iframe's shape changes (index.html); the game page stretches its canvas to
+// fill it (game/index.html). Remembered per browser, off by default.
+const arBox = $('aspect-43');
+arBox.checked = localStorage.getItem('sqldoom.aspect43') === '1';
+document.body.classList.toggle('aspect-43', arBox.checked);
+fitPane();
+arBox.addEventListener('change', () => {
+  localStorage.setItem('sqldoom.aspect43', arBox.checked ? '1' : '0');
+  document.body.classList.toggle('aspect-43', arBox.checked);
+  fitPane();
   game.focus();
 });
 
