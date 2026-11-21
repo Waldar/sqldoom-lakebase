@@ -175,7 +175,7 @@ players AS (
 -- victims (victim_id NOT NULL, the infighting path) never get it.
 hurt AS (
   SELECT d.dmg >> CASE WHEN g.skill=0 THEN 1 ELSE 0 END AS dmg,
-         d.mx, d.my, d.victim_player
+         d.mx, d.my, d.victim_player, d.attacker_id
   FROM monster_attack_damage d
   JOIN params p ON d.map_id = p.map_id
   JOIN game_tic_commands g ON g.map_id = p.map_id
@@ -190,7 +190,7 @@ hurt AS (
 -- three shotgun pellets from the same sergeant push three times as hard as
 -- one.
 shove AS (
-  SELECT h.dmg, h.victim_player,
+  SELECT h.dmg, h.victim_player, h.attacker_id,
          CASE WHEN r.dist > 0 THEN h.dmg * 0.125 * r.ddx / r.dist
               ELSE 0.0 END AS tx,
          CASE WHEN r.dist > 0 THEN h.dmg * 0.125 * r.ddy / r.dist
@@ -210,7 +210,10 @@ totaled AS (
          -- 16.16 fixed point, as vanilla accumulates momentum: a float sum of
          -- several hits would depend on the order the rows arrive in.
          SUM(ROUND(tx * 65536.0)) / 65536.0 AS thrust_x,
-         SUM(ROUND(ty * 65536.0)) / 65536.0 AS thrust_y
+         SUM(ROUND(ty * 65536.0)) / 65536.0 AS thrust_y,
+         -- plyr->attacker (the status bar face turns to it): one of this
+         -- tic's attackers, as Doom keeps the last P_DamageMobj's source
+         MAX(attacker_id) AS attacker_id
   FROM shove
   GROUP BY victim_player
 ),
@@ -243,6 +246,7 @@ SET armor = ps.armor - a.saved,
     -- always resets it to a full flash.
     pain_face_tics = CASE WHEN a.took > 0 THEN 12
                           ELSE ps.pain_face_tics END,
+    attacker_id = CASE WHEN a.took > 0 THEN a.attacker_id ELSE ps.attacker_id END,
     -- A monster or a barrel is the world, for the deathmatch scoreboard.
     killer_id = CASE WHEN ps.alive AND ps.health - a.took <= 0 THEN -1
                      ELSE ps.killer_id END,

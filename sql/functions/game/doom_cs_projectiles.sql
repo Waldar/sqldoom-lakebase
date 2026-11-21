@@ -638,6 +638,8 @@ SET armor=ps.armor-a.saved,
     damage_count=LEAST(100,ps.damage_count+a.took),
     alive=GREATEST(0,ps.health-a.took)>0,
     pain_face_tics=CASE WHEN a.took>0 THEN 12 ELSE ps.pain_face_tics END,
+    -- plyr->attacker: the missile's shooter (the face turns to it)
+    attacker_id=CASE WHEN a.took>0 THEN a.source_id ELSE ps.attacker_id END,
     killer_id=CASE WHEN ps.alive AND ps.health-a.took<=0 THEN a.source_id
                    ELSE ps.killer_id END,
     momentum_x=(ps.momentum_x+a.thrust_x)::real,

@@ -254,6 +254,7 @@ SET armor=ps.armor-d.saved,
     death_health=CASE WHEN ps.alive AND ps.health-(10-d.saved)<=0 THEN ps.health-(10-d.saved) ELSE ps.death_health END,
     damage_count=LEAST(100,ps.damage_count+(10-d.saved)),
     pain_face_tics=12,
+    attacker_id=NULL,            -- crushed: no attacker (the face's rampage look)
     alive=(ps.health-(10-d.saved))>0,
     killer_id=CASE WHEN (ps.health-(10-d.saved))<=0 THEN -1 ELSE ps.killer_id END
 FROM (

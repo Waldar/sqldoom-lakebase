@@ -168,6 +168,13 @@ IF _cs.deathmatch THEN
   IF _cs.has4 THEN PERFORM doom_tic_dm_player(doom_run_tic_core.p_map_id,doom_run_tic_core.p4); END IF;
 END IF;
 
+-- The status bar face, after the world (ST_Ticker after P_Ticker): it
+-- writes the row only when the face changes (doom_cs_face).
+PERFORM doom_cs_face(doom_run_tic_core.p_map_id,doom_run_tic_core.p1);
+IF _cs.deathmatch THEN PERFORM doom_cs_face(doom_run_tic_core.p_map_id,doom_run_tic_core.p2); END IF;
+IF _cs.has3 THEN PERFORM doom_cs_face(doom_run_tic_core.p_map_id,doom_run_tic_core.p3); END IF;
+IF _cs.has4 THEN PERFORM doom_cs_face(doom_run_tic_core.p_map_id,doom_run_tic_core.p4); END IF;
+
 -- Most consecutive tics run exactly the same set of stages, and the client
 -- re-reads this row every tic regardless, so skipping the unchanged writes
 -- costs it nothing and saves a row version per tic.

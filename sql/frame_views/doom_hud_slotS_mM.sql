@@ -1925,6 +1925,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
          SELECT ps.health,
             ps.alive,
             ps.pain_face_tics,
+            ps.face_patch,
             ps.armor,
             ps.ammo_bullets,
             ps.ammo_shells,
@@ -1979,12 +1980,7 @@ AS $template$SELECT $view$CREATE OR REPLACE VIEW doom.{name} AS
             (172 + (((weapon_ownership.weapon_id - 2) / 3) * 10)) AS y
            FROM weapon_ownership
         ), ui_face AS (
-         SELECT
-                CASE
-                    WHEN (NOT pu.alive) THEN 'STFDEAD0'::text
-                    WHEN (pu.pain_face_tics > 0) THEN ('STFOUCH'::text || (LEAST(4, GREATEST(0, ((100 - GREATEST(0, LEAST(100, pu.health))) / 20))))::text)
-                    ELSE (('STFST'::text || (LEAST(4, GREATEST(0, ((100 - GREATEST(0, LEAST(100, pu.health))) / 20))))::text) || '0'::text)
-                END AS face_patch
+         SELECT pu.face_patch   -- the tic's choice (doom_cs_face, Doom's ST_updateFaceWidget, 2026-11-20)
            FROM player_ui_state pu
         ), status_bar AS (
          SELECT rs.screen_h AS top_y,

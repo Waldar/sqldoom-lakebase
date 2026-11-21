@@ -84,6 +84,20 @@ def poses(cur, map_id, slot, positions, seed):
     return out
 
 
+def set_pose(cur, x, y, z, angle):
+    """The camera, where the frame views read it: the player's state (since
+    2026-11-19, frames rendered in the app), now and one tic ago the same so
+    no interpolation moves it. (Until 2026-11-20 this tool set
+    mp_players.pose_*, which the views no longer read: every pose rendered
+    the player's start.)"""
+    cur.execute("UPDATE player_state ps SET position_x = %s, previous_x = %s, position_y = %s, previous_y = %s, "
+                "view_z = %s, previous_view_z = %s, view_angle = %s, previous_view_angle = %s "
+                "FROM mp_players mp WHERE mp.role_name = %s AND ps.map_id = mp.map_id "
+                "AND ps.player_thing_id = mp.player_thing_id", (x, x, y, y, z, z, angle, angle, PLAYER))
+    cur.execute("UPDATE mp_players SET pose_x = %s, pose_y = %s, pose_z = %s, pose_angle = %s WHERE role_name = %s",
+                (x, y, z, angle, PLAYER))
+
+
 def render(cur, stmt):
     t0 = time.perf_counter()
     cur.execute(f"EXECUTE {stmt}")
@@ -127,8 +141,7 @@ def main():
         ps = poses(cur, map_id, slot, a.positions, a.seed)
         tb, tc, same, diffs, seen = [], [], 0, [], set()
         for i, (x, y, z, ang) in enumerate(ps):
-            cur.execute("UPDATE mp_players SET pose_x = %s, pose_y = %s, pose_z = %s, pose_angle = %s WHERE role_name = %s",
-                        (x, y, z, ang, PLAYER))
+            set_pose(cur, x, y, z, ang)
             if i == 0:
                 for _ in range(6):                    # warm up both plans (generic after 5)
                     render(cur, "f_base"); render(cur, "f_cand")

@@ -33,6 +33,7 @@ SET armor = ps.armor - d.saved,
     -- P_DamageMobj: player->damagecount += damage, which reddens the screen.
     damage_count = LEAST(100, ps.damage_count + (d.amount - d.saved)),
     pain_face_tics = 12,
+    attacker_id = NULL,          -- plyr->attacker = NULL: the world (the face's rampage look)
     alive = (ps.health - (d.amount - d.saved)) > 0,
     -- The floor is the world, for the deathmatch scoreboard.
     killer_id = CASE WHEN (ps.health - (d.amount - d.saved)) <= 0 THEN -1

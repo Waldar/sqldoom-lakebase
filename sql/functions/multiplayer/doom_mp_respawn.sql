@@ -64,7 +64,11 @@ SET health=100, alive=TRUE, armor=0, armor_class=0, backpack=FALSE,
     pain_face_tics=0, damage_count=0, bonus_count=0,
     death_tics=0, killer_id=NULL, death_health=NULL, sprite_frame='A',
     view_dip=0, view_dip_delta=0,
-    momentum_x=0, momentum_y=0, momentum_z=0, bob_strength=0
+    momentum_x=0, momentum_y=0, momentum_z=0, bob_strength=0,
+    -- the face starts over (ST_initData; migration 0007, doom_cs_face): its
+    -- weapons are taken as they are now, at the face's first tic
+    face_patch='STFST00', face_until=NULL, face_priority=0, face_old_health=100,
+    face_fire_since=NULL, face_weapons=-1, attacker_id=NULL
 WHERE ps.map_id=doom_mp_respawn.p_map_id AND ps.player_thing_id=doom_mp_respawn.p_player_thing_id;
 
 DELETE FROM player_weapon_owned

@@ -60,6 +60,9 @@ UI_PATCH_NAMES = (
     "STFTR00", "STFTR10", "STFTR20", "STFTR30", "STFTR40",
     "STFOUCH0", "STFOUCH1", "STFOUCH2", "STFOUCH3", "STFOUCH4",
     "STFEVL0", "STFEVL1", "STFEVL2", "STFEVL3", "STFEVL4",
+    # the "rampage" face: hit head-on, hurt by the floor, fire held 2 s
+    # (ST_updateFaceWidget; added 2026-11-20 with Doom's face logic)
+    "STFKILL0", "STFKILL1", "STFKILL2", "STFKILL3", "STFKILL4",
     "STFGOD0", "STFDEAD0",
     # Small digit font for the sub-box showing all 4 ammo types at once.
     "STYSNUM0", "STYSNUM1", "STYSNUM2", "STYSNUM3", "STYSNUM4",
@@ -103,16 +106,14 @@ UI_PATCH_NAMES = (
 )
 
 
-def load_ui_patches(fp, cur, lumps):
-    """Decode the real status-bar patches (STBAR/STTNUM/STFST/...) verbatim."""
-    cur.execute("TRUNCATE ui_patches;")
-    cur.execute("TRUNCATE ui_patch_pixels;")
-
+def decode_ui_patches(fp, lumps, names=UI_PATCH_NAMES):
+    """The ui_patches rows and ui_patch_pixels rows of `names`, and the
+    names missing from the WAD."""
     lmap = {l["name"]: l for l in lumps}
     rows = []
     pixel_rows = []
     skipped = []
-    for name in UI_PATCH_NAMES:
+    for name in names:
         lump = lmap.get(name)
         if lump is None or lump["size"] <= 0:
             skipped.append(name)
@@ -138,7 +139,14 @@ def load_ui_patches(fp, cur, lumps):
             name, width, height, left, top,
             psycopg2.Binary(bytes(pixels)), psycopg2.Binary(bytes(mask)),
         ))
+    return rows, pixel_rows, skipped
 
+
+def load_ui_patches(fp, cur, lumps):
+    """Decode the real status-bar patches (STBAR/STTNUM/STFST/...) verbatim."""
+    cur.execute("TRUNCATE ui_patches;")
+    cur.execute("TRUNCATE ui_patch_pixels;")
+    rows, pixel_rows, skipped = decode_ui_patches(fp, lumps)
     if rows:
         execute_values(
             cur,
@@ -822,6 +830,46 @@ def load_sprites(fp, cur, lumps):
     return _load_sprites(fp, cur, lumps)
 
 
+def composite_wall_textures(fp, lumps):
+    """Every wall texture of TEXTURE1/TEXTURE2 composited from its patches:
+    [(name, width, height, palette indices, mask)], row-major. mask (one byte
+    a texel, 1 where a patch covers it, 0 where none does) is None when every
+    texel is covered: only see-through textures (grates) have holes, which
+    Doom leaves undrawn on a two-sided line's middle texture
+    (R_RenderMaskedSegRange draws a column's posts only). The palette index
+    of an uncovered texel is 0, as before."""
+    lmap = _lump_map(lumps)
+    pnames = _load_pnames(fp, lmap) or []
+    patch_cache = _load_patches(fp, lumps)
+    texdefs = _parse_texture_lump(fp, lmap, "TEXTURE1") + _parse_texture_lump(fp, lmap, "TEXTURE2")
+    out = []
+    for name, w, h, patches in texdefs:
+        if w <= 0 or h <= 0:
+            continue
+        # Zero is also the original fallback for texels uncovered by patches.
+        tex = bytearray(w * h)
+        covered = bytearray(w * h)
+        for ox, oy, pi in patches:
+            if pi < 0 or pi >= len(pnames):
+                continue
+            patch = patch_cache.get(pnames[pi])
+            if patch is None:
+                continue
+            pw, _ph, _left, _top, cols = patch
+            for x in range(pw):
+                tx = ox + x
+                if tx < 0 or tx >= w:
+                    continue
+                for td, pxbytes in cols.get(x, []):
+                    for row, palette_index in enumerate(pxbytes):
+                        ty = oy + td + row
+                        if 0 <= ty < h:
+                            tex[ty * w + tx] = palette_index
+                            covered[ty * w + tx] = 1
+        out.append((name, w, h, bytes(tex), None if all(covered) else bytes(covered)))
+    return out, len(patch_cache)
+
+
 def load_textures(fp, cur, lumps, map_names=()):
     """Populate wall, flat, COLORMAP, and sprite data from the WAD.
     Silently skips if the WAD has no texture lumps (e.g. a map-only PWAD)."""
@@ -832,11 +880,10 @@ def load_textures(fp, cur, lumps, map_names=()):
         return
     progress("Preparing global texture and sprite tables...")
     progress("Decoding wall patches and texture definitions...")
-    pnames = _load_pnames(fp, lmap) or []
-    patch_cache = _load_patches(fp, lumps)
-    texdefs = _parse_texture_lump(fp, lmap, "TEXTURE1") + _parse_texture_lump(fp, lmap, "TEXTURE2")
+    walltex, n_patches = composite_wall_textures(fp, lumps)
     progress(
-        f"Decoded {len(patch_cache)} patches and {len(texdefs)} wall textures."
+        f"Decoded {n_patches} patches and {len(walltex)} wall textures "
+        f"({sum(m is not None for *_, m in walltex)} see-through)."
     )
 
     cur.execute("""TRUNCATE walltex_meta;
@@ -865,38 +912,13 @@ def load_textures(fp, cur, lumps, map_names=()):
         page_size=2000,
     )
     # --- Wall textures: one packed palette-index BYTEA per texture ---
-    progress(f"Compositing and loading {len(texdefs)} wall textures...")
-    meta_rows = []
-    n_wall_px = 0
-    for texture_index, (name, w, h, patches) in enumerate(texdefs, 1):
-        if w <= 0 or h <= 0:
-            continue
-        # Zero is also the original fallback for texels uncovered by patches.
-        tex = bytearray(w * h)
-        for ox, oy, pi in patches:
-            if pi < 0 or pi >= len(pnames):
-                continue
-            pname = pnames[pi]
-            patch = patch_cache.get(pname)
-            if patch is None:
-                continue
-            pw, _ph, _left, _top, cols = patch
-            for x in range(pw):
-                tx = ox + x
-                if tx < 0 or tx >= w:
-                    continue
-                for td, pxbytes in cols.get(x, []):
-                    for row, palette_index in enumerate(pxbytes):
-                        ty = oy + td + row
-                        if 0 <= ty < h:
-                            tex[ty * w + tx] = palette_index
-        meta_rows.append((name, w, h, psycopg2.Binary(bytes(tex))))
-        n_wall_px += len(tex)
-        if texture_index % 25 == 0 or texture_index == len(texdefs):
-            progress(f"Wall textures: {texture_index}/{len(texdefs)} complete.")
+    progress(f"Loading {len(walltex)} wall textures...")
+    meta_rows = [(name, w, h, psycopg2.Binary(tex), psycopg2.Binary(mask) if mask is not None else None)
+                 for name, w, h, tex, mask in walltex]
+    n_wall_px = sum(len(tex) for _, _, _, tex, _ in walltex)
     execute_values(cur,
         """INSERT INTO walltex_meta
-           (name, width, height, palette_indices) VALUES %s""",
+           (name, width, height, palette_indices, mask) VALUES %s""",
         meta_rows, page_size=500)
 
     # --- Flats: one packed 64x64 palette-index BYTEA per lump ---

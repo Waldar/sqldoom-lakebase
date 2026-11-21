@@ -155,7 +155,9 @@ WITH RECURSIVE render_context AS NOT MATERIALIZED (
     -- the textures of the segs in view (heights, below) and the sky, about
     -- 20: all 30-60 of the map's took 2-3.5 ms a frame to decompress on
     -- Lakebase.
-    SELECT m.name, m.width, m.height, (m.palette_indices || ''::bytea) AS palette_indices
+    SELECT m.name, m.width, m.height, (m.palette_indices || ''::bytea) AS palette_indices,
+           -- coverage of a see-through texture (migration 0007; NULL: opaque)
+           (m.mask || ''::bytea) AS mask
     FROM walltex_meta m
     WHERE m.name IN (
       SELECT t.tex FROM heights_shown h
@@ -637,9 +639,25 @@ wall_parts_tex AS (
   SELECT wp.*,
          COALESCE(m.width, 64)  AS tex_w,
          COALESCE(m.height, 64) AS tex_h,
-         m.width                AS tex_width
+         m.width                AS tex_width,
+         -- A masked middle texture is drawn once, its own height from its
+         -- top, inside the opening (R_RenderMaskedSegRange: dc_texturemid at
+         -- the lower ceiling, or the higher floor plus the texture's height
+         -- when bottom-pegged, plus the row offset; posts only, no tiling).
+         -- Its part keeps the opening's extent (z_bot..z_top) for the plane
+         -- clips (panel_cols); m_bot..m_top is only where it is drawn.
+         CASE WHEN wp.part = 'midmask' THEN
+           LEAST(LEAST(h.f_ceil, h.b_ceil),
+                 wp.v_anchor_base + CASE WHEN wp.v_anchor_add_tex_h THEN COALESCE(m.height, 64) ELSE 0 END + wp.y_offset)
+         END AS m_top,
+         CASE WHEN wp.part = 'midmask' THEN
+           GREATEST(GREATEST(h.f_floor, h.b_floor),
+                    wp.v_anchor_base + CASE WHEN wp.v_anchor_add_tex_h THEN COALESCE(m.height, 64) ELSE 0 END + wp.y_offset
+                    - COALESCE(m.height, 64))
+         END AS m_bot
   FROM wall_parts wp
   LEFT JOIN walltex_meta m ON m.name = wp.tex
+  LEFT JOIN heights_shown h ON wp.part = 'midmask' AND h.seg_id = wp.seg_id
 ),
 columns AS (
   SELECT
@@ -711,7 +729,11 @@ vertical AS (
     -- tex_w / tex_h (texture size, 64x64 if missing) come with the seg part
     p.v_anchor_base
       + CASE WHEN p.v_anchor_add_tex_h THEN p.tex_h ELSE 0 END
-      AS v_anchor_z
+      AS v_anchor_z,
+    -- the rows drawn (clamped_spans): a masked middle texture's own
+    -- (m_top..m_bot), any other part's whole extent, the same as y_top_f..y_bot_f
+    (rs.cy - p.scale * (COALESCE(p.m_top, p.z_top) - c.pz)) AS y_dtop_f,
+    (rs.cy - p.scale * (COALESCE(p.m_bot, p.z_bot) - c.pz)) AS y_dbot_f
   FROM per_column p
   CROSS JOIN render_settings rs
   CROSS JOIN cam c
@@ -732,19 +754,19 @@ clamped_spans AS (
       -- clamp to [0 .. screen_h-1] in FLOAT, then cast
       CEIL (
         LEAST( rs.screen_h - 1.0::float8,
-               GREATEST(0.0::float8, LEAST(v.y_top_f, v.y_bot_f))
+               GREATEST(0.0::float8, LEAST(v.y_dtop_f, v.y_dbot_f))
         )
       )::int AS y_start,
       FLOOR(
         LEAST( rs.screen_h - 1.0::float8,
-               GREATEST(0.0::float8, GREATEST(v.y_top_f, v.y_bot_f))
+               GREATEST(0.0::float8, GREATEST(v.y_dtop_f, v.y_dbot_f))
         )
       )::int AS y_end
     FROM vertical v
     CROSS JOIN render_settings rs
     -- keep only spans that intersect the screen vertically
-    WHERE LEAST(v.y_top_f, v.y_bot_f) < rs.screen_h
-      AND GREATEST(v.y_top_f, v.y_bot_f) >= 0
+    WHERE LEAST(v.y_dtop_f, v.y_dbot_f) < rs.screen_h
+      AND GREATEST(v.y_dtop_f, v.y_dbot_f) >= 0
   ) t
   -- final guard: ignore empty/inverted spans
   WHERE t.y_end >= t.y_start
@@ -756,6 +778,14 @@ clamped_spans_lit AS (
          -- the texture is whole, every pixel of the span reads in range.
          (wt.palette_indices IS NOT NULL AND cu.u_i >= 0 AND cu.u_i < c.tex_width
           AND OCTET_LENGTH(wt.palette_indices) >= c.tex_width * c.tex_h) AS texel_safe,
+         -- A masked middle texture's coverage, where a texel no patch covers
+         -- is not drawn (wall_lanes), so what is behind shows through. NULL
+         -- for every other part and texture: drawn opaque, as before. Only
+         -- where the offsets are in range (as texel_safe).
+         CASE WHEN c.part = 'midmask' AND wt.mask IS NOT NULL AND cu.u_i >= 0 AND cu.u_i < c.tex_width
+                   AND OCTET_LENGTH(wt.mask) >= c.tex_width * c.tex_h
+                   AND OCTET_LENGTH(wt.palette_indices) >= c.tex_width * c.tex_h
+              THEN wt.mask END AS tex_mask,
          CASE WHEN wr.invuln THEN rs.light_index_invuln
               ELSE doom_light_index(c.f_light, c.light_bias + wr.extra_light,
                                     doom_light_scale(c.depth_x))
@@ -809,72 +839,72 @@ wall_lanes AS (
   -- ProjectSet copies every column it has into each row it emits. The lanes
   -- are identical but for their row (tools/gen_lanes.py prints them).
   SELECT w.screen_x_clamped AS x, w.g,
-    CASE WHEN (w.g*16+0) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+0) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+0) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+0) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+0) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+0) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+0) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k0,
-    CASE WHEN (w.g*16+1) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+1) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+1) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+1) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+1) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+1) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+1) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k1,
-    CASE WHEN (w.g*16+2) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+2) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+2) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+2) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+2) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+2) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+2) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k2,
-    CASE WHEN (w.g*16+3) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+3) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+3) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+3) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+3) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+3) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+3) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k3,
-    CASE WHEN (w.g*16+4) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+4) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+4) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+4) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+4) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+4) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+4) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k4,
-    CASE WHEN (w.g*16+5) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+5) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+5) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+5) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+5) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+5) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+5) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k5,
-    CASE WHEN (w.g*16+6) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+6) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+6) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+6) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+6) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+6) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+6) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k6,
-    CASE WHEN (w.g*16+7) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+7) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+7) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+7) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+7) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+7) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+7) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k7,
-    CASE WHEN (w.g*16+8) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+8) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+8) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+8) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+8) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+8) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+8) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k8,
-    CASE WHEN (w.g*16+9) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+9) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+9) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+9) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+9) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+9) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+9) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k9,
-    CASE WHEN (w.g*16+10) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+10) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+10) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+10) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+10) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+10) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+10) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k10,
-    CASE WHEN (w.g*16+11) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+11) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+11) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+11) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+11) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+11) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+11) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k11,
-    CASE WHEN (w.g*16+12) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+12) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+12) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+12) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+12) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+12) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+12) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k12,
-    CASE WHEN (w.g*16+13) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+13) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+13) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+13) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+13) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+13) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+13) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k13,
-    CASE WHEN (w.g*16+14) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+14) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+14) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+14) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+14) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+14) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+14) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k14,
-    CASE WHEN (w.g*16+15) BETWEEN w.y_start AND w.y_end THEN w.key_hi | (CASE
+    CASE WHEN (w.g*16+15) BETWEEN w.y_start AND w.y_end AND (w.tex_mask IS NULL OR GET_BYTE(w.tex_mask, (((FLOOR(w.v0 + ((w.g*16+15) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) <> 0) THEN w.key_hi | (CASE
       WHEN w.texel_safe THEN GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+15) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i))
       WHEN w.tex_pi IS NULL OR (((FLOOR(w.v0 + ((w.g*16+15) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) < 0 OR (((FLOOR(w.v0 + ((w.g*16+15) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i) >= OCTET_LENGTH(w.tex_pi) THEN 0
       ELSE GET_BYTE(w.tex_pi, (((FLOOR(w.v0 + ((w.g*16+15) - w.y_start)*w.v_step)::int % w.tex_h + w.tex_h) % w.tex_h) * w.tex_width + w.u_i)) END)::bigint END AS k15
   FROM (SELECT ws.screen_x_clamped, ws.key_hi, ws.texel_safe, ws.tex_pi, ws.tex_width,
-               ws.tex_h, ws.u_i, ws.v0, ws.v_step, ws.y_start, ws.y_end,
+               ws.tex_h, ws.u_i, ws.v0, ws.v_step, ws.y_start, ws.y_end, ws.tex_mask,
                generate_series(ws.y_start >> 4, ws.y_end >> 4) AS g
         FROM wall_spans ws) w
 ),
@@ -1758,107 +1788,105 @@ sprite_lanes AS (
   -- range (0x70..0x7F) is remapped per player: Slot 2 indigo (0x60), 3 brown
   -- (0x40), 4 red (0x20). Doom draws a Spectre with R_DrawFuzzColumn: the
   -- sprite's own colour is discarded and the pixel is re-read from the
-  -- screen a row away through colormap 6, which looks like a shimmer. A
-  -- set-based renderer resolves all pixels at once and has no finished
-  -- screen to sample, so this instead keeps the silhouette and drives it to
-  -- near-black with a per-pixel wobble.
+  -- screen a row away through colormap 6, which looks like a shimmer. Here
+  -- a fuzz sprite's fragments go to fk/fm, not k0..k15: view_words, where
+  -- the column's pixels are resolved, gives such a pixel the colour of the
+  -- one behind it a row away through colormap 6 (2026-11-20; it was
+  -- near-black with a wobble).
   SELECT s.screen_x AS x, s.g,
-    CASE WHEN GET_BYTE(s.mask, s.o0) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+0) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o0) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o0) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o0) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o0) END)::bigint END AS k0,
-    CASE WHEN GET_BYTE(s.mask, s.o1) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+1) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o1) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o1) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o1) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o1) END)::bigint END AS k1,
-    CASE WHEN GET_BYTE(s.mask, s.o2) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+2) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o2) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o2) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o2) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o2) END)::bigint END AS k2,
-    CASE WHEN GET_BYTE(s.mask, s.o3) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+3) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o3) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o3) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o3) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o3) END)::bigint END AS k3,
-    CASE WHEN GET_BYTE(s.mask, s.o4) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+4) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o4) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o4) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o4) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o4) END)::bigint END AS k4,
-    CASE WHEN GET_BYTE(s.mask, s.o5) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+5) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o5) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o5) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o5) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o5) END)::bigint END AS k5,
-    CASE WHEN GET_BYTE(s.mask, s.o6) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+6) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o6) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o6) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o6) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o6) END)::bigint END AS k6,
-    CASE WHEN GET_BYTE(s.mask, s.o7) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+7) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o7) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o7) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o7) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o7) END)::bigint END AS k7,
-    CASE WHEN GET_BYTE(s.mask, s.o8) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+8) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o8) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o8) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o8) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o8) END)::bigint END AS k8,
-    CASE WHEN GET_BYTE(s.mask, s.o9) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+9) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o9) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o9) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o9) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o9) END)::bigint END AS k9,
-    CASE WHEN GET_BYTE(s.mask, s.o10) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+10) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o10) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o10) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o10) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o10) END)::bigint END AS k10,
-    CASE WHEN GET_BYTE(s.mask, s.o11) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+11) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o11) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o11) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o11) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o11) END)::bigint END AS k11,
-    CASE WHEN GET_BYTE(s.mask, s.o12) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+12) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o12) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o12) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o12) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o12) END)::bigint END AS k12,
-    CASE WHEN GET_BYTE(s.mask, s.o13) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+13) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o13) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o13) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o13) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o13) END)::bigint END AS k13,
-    CASE WHEN GET_BYTE(s.mask, s.o14) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+14) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o14) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o14) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o14) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
               ELSE GET_BYTE(s.pixels, s.o14) END)::bigint END AS k14,
-    CASE WHEN GET_BYTE(s.mask, s.o15) <> 0 THEN s.key_hi
-      | ((CASE WHEN s.fuzz THEN (26 + ((s.screen_x * 7 + (s.g*16+15) * 13 + s.depth::int) % 5))::int
-               ELSE s.base_light END)::bigint << 8)
+    CASE WHEN NOT s.fuzz AND GET_BYTE(s.mask, s.o15) <> 0 THEN s.key_hi
+      | (s.base_light::bigint << 8)
       | (CASE WHEN s.mp_slot > 1 AND GET_BYTE(s.pixels, s.o15) BETWEEN 112 AND 127
               THEN GET_BYTE(s.pixels, s.o15) - 112 + CASE s.mp_slot WHEN 2 THEN 96 WHEN 3 THEN 64 ELSE 32 END
-              ELSE GET_BYTE(s.pixels, s.o15) END)::bigint END AS k15
+              ELSE GET_BYTE(s.pixels, s.o15) END)::bigint END AS k15,
+    -- a fuzz sprite's column: its depth key, and the rows of the cell it
+    -- covers as bits (bit j: row 16g+j), for view_words
+    CASE WHEN s.fuzz THEN s.key_hi END AS fk,
+    CASE WHEN s.fuzz THEN
+        (CASE WHEN GET_BYTE(s.mask, s.o0) <> 0 THEN 1 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o1) <> 0 THEN 2 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o2) <> 0 THEN 4 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o3) <> 0 THEN 8 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o4) <> 0 THEN 16 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o5) <> 0 THEN 32 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o6) <> 0 THEN 64 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o7) <> 0 THEN 128 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o8) <> 0 THEN 256 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o9) <> 0 THEN 512 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o10) <> 0 THEN 1024 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o11) <> 0 THEN 2048 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o12) <> 0 THEN 4096 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o13) <> 0 THEN 8192 ELSE 0 END)
+      | (CASE WHEN GET_BYTE(s.mask, s.o14) <> 0 THEN 16384 ELSE 0 END) | (CASE WHEN GET_BYTE(s.mask, s.o15) <> 0 THEN 32768 ELSE 0 END)
+    END AS fm
   FROM (
     SELECT t.screen_x, t.g, t.key_hi, t.fuzz, t.depth, t.base_light, t.mp_slot,
            t.pixels, t.mask,
@@ -1950,15 +1978,15 @@ view_lanes AS NOT MATERIALIZED (
   -- regardless of depth: their keys are negative, which every view fragment
   -- (depth >= 0) loses to: the message beats the flash (layer 2), which beats
   -- the weapon (layer 1).
-  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15 FROM wall_lanes
+  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL::bigint AS fk, NULL::int AS fm FROM wall_lanes
   UNION ALL
-  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15 FROM sprite_lanes
+  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, fk, fm FROM sprite_lanes
   UNION ALL
-  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15 FROM plane_lanes
+  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL, NULL FROM plane_lanes
   UNION ALL
-  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15 FROM psprite_lanes
+  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL, NULL FROM psprite_lanes
   UNION ALL
-  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15 FROM message_lanes
+  SELECT x * 16 + g AS cell, k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14, k15, NULL, NULL FROM message_lanes
 ),
 view_cells AS NOT MATERIALIZED (
   -- The nearest fragment of each pixel: its lane's MIN over the rows of its
@@ -2082,7 +2110,7 @@ message_lanes AS (
         WHERE mp.x BETWEEN 0 AND rs.screen_w - 1 AND mp.y BETWEEN 0 AND rs.screen_h - 1) m
 ),
 player_ui_state AS (
-  SELECT ps.health, ps.alive, ps.pain_face_tics, ps.armor,
+  SELECT ps.health, ps.alive, ps.pain_face_tics, ps.face_patch, ps.armor,
          ps.ammo_bullets, ps.ammo_shells, ps.ammo_rockets, ps.ammo_cells,
          ps.key_blue,ps.key_yellow,ps.key_red,
          ps.damage_count, ps.bonus_count, ps.radsuit_tics,
@@ -2135,14 +2163,10 @@ weapon_layers AS (
   FROM weapon_ownership
 ),
 ui_face AS (
-  SELECT
-    CASE
-      WHEN NOT pu.alive THEN 'STFDEAD0'
-      WHEN pu.pain_face_tics > 0 THEN
-        'STFOUCH' || LEAST(4, GREATEST(0, (100 - GREATEST(0, LEAST(100, pu.health))) / 20))::text
-      ELSE
-        'STFST' || LEAST(4, GREATEST(0, (100 - GREATEST(0, LEAST(100, pu.health))) / 20))::text || '0'
-    END AS face_patch
+  -- The face the tic chose, as Doom's ST_updateFaceWidget (doom_cs_face,
+  -- 2026-11-20): looking around, turning to an attacker, the evil grin, the
+  -- rampage face, god mode, dead. (It was dead / ouch on any hit / straight.)
+  SELECT pu.face_patch
   FROM player_ui_state pu
 ),
 status_bar AS NOT MATERIALIZED (
@@ -2397,28 +2421,89 @@ frame_colormap AS MATERIALIZED (
 view_words AS (
   -- A cell's sixteen pixels resolved (view_cells' MIN per lane) and through
   -- COLORMAP, in the aggregate's own projection, a node fewer a cell; a hole
-  -- is index 0. The palette is read through scalar subqueries, evaluated
+  -- is index 0.
+  -- A spectre's pixel is Doom's R_DrawFuzzColumn (2026-11-20): where a
+  -- spectre covers the row (fm, sprite_lanes; never in k0..k15) and is
+  -- nearer (fk, the nearest spectre's depth in the cell) than the nearest
+  -- other fragment, the pixel is the one a row above or below,
+  -- as fuzzoffset[] picks it (its 50 signs as the bits of
+  -- 807151847202229, 1 a row down; the position runs with the column, the
+  -- row and the tic, where Doom's fuzzpos runs with every fuzz pixel
+  -- drawn), through COLORMAP 6. That pixel is the one without spectres
+  -- (k's MIN), where Doom reads the screen, on which a spectre drawn first
+  -- is sometimes already there. Within the cell: at its first and last row
+  -- the other neighbour. Spectres in two columns of their own, not a test
+  -- in every aggregate (7-10 ms a frame, spectre or none) nor sixteen
+  -- columns (2.5 ms). The palette is read through scalar subqueries, evaluated
   -- once a frame: a join would cost a pass per cell. The entry's number,
   -- light * 256 + texel, is the key's low 14 bits as they are. sh is where
   -- the cell's column goes in a row of its block: 8 * (7 - column).
   SELECT ((cell >> 7) << 4) | (cell & 15) AS block,
          (7 - ((cell >> 4) & 7)) << 3 AS sh,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k0) & 16383)::int), 0)::bigint AS b0,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k1) & 16383)::int), 0)::bigint AS b1,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k2) & 16383)::int), 0)::bigint AS b2,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k3) & 16383)::int), 0)::bigint AS b3,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k4) & 16383)::int), 0)::bigint AS b4,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k5) & 16383)::int), 0)::bigint AS b5,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k6) & 16383)::int), 0)::bigint AS b6,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k7) & 16383)::int), 0)::bigint AS b7,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k8) & 16383)::int), 0)::bigint AS b8,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k9) & 16383)::int), 0)::bigint AS b9,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k10) & 16383)::int), 0)::bigint AS b10,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k11) & 16383)::int), 0)::bigint AS b11,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k12) & 16383)::int), 0)::bigint AS b12,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k13) & 16383)::int), 0)::bigint AS b13,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k14) & 16383)::int), 0)::bigint AS b14,
-         COALESCE(GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k15) & 16383)::int), 0)::bigint AS b15
+         COALESCE(CASE WHEN (bit_or(fm) & 1) <> 0 AND MIN(fk) < COALESCE(MIN(k0), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 0 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k1) ELSE MIN(k1) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k0) & 16383)::int) END, 0)::bigint AS b0,
+         COALESCE(CASE WHEN (bit_or(fm) & 2) <> 0 AND MIN(fk) < COALESCE(MIN(k1), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 1 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k2) ELSE MIN(k0) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k1) & 16383)::int) END, 0)::bigint AS b1,
+         COALESCE(CASE WHEN (bit_or(fm) & 4) <> 0 AND MIN(fk) < COALESCE(MIN(k2), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 2 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k3) ELSE MIN(k1) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k2) & 16383)::int) END, 0)::bigint AS b2,
+         COALESCE(CASE WHEN (bit_or(fm) & 8) <> 0 AND MIN(fk) < COALESCE(MIN(k3), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 3 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k4) ELSE MIN(k2) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k3) & 16383)::int) END, 0)::bigint AS b3,
+         COALESCE(CASE WHEN (bit_or(fm) & 16) <> 0 AND MIN(fk) < COALESCE(MIN(k4), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 4 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k5) ELSE MIN(k3) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k4) & 16383)::int) END, 0)::bigint AS b4,
+         COALESCE(CASE WHEN (bit_or(fm) & 32) <> 0 AND MIN(fk) < COALESCE(MIN(k5), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 5 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k6) ELSE MIN(k4) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k5) & 16383)::int) END, 0)::bigint AS b5,
+         COALESCE(CASE WHEN (bit_or(fm) & 64) <> 0 AND MIN(fk) < COALESCE(MIN(k6), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 6 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k7) ELSE MIN(k5) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k6) & 16383)::int) END, 0)::bigint AS b6,
+         COALESCE(CASE WHEN (bit_or(fm) & 128) <> 0 AND MIN(fk) < COALESCE(MIN(k7), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 7 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k8) ELSE MIN(k6) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k7) & 16383)::int) END, 0)::bigint AS b7,
+         COALESCE(CASE WHEN (bit_or(fm) & 256) <> 0 AND MIN(fk) < COALESCE(MIN(k8), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 8 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k9) ELSE MIN(k7) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k8) & 16383)::int) END, 0)::bigint AS b8,
+         COALESCE(CASE WHEN (bit_or(fm) & 512) <> 0 AND MIN(fk) < COALESCE(MIN(k9), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 9 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k10) ELSE MIN(k8) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k9) & 16383)::int) END, 0)::bigint AS b9,
+         COALESCE(CASE WHEN (bit_or(fm) & 1024) <> 0 AND MIN(fk) < COALESCE(MIN(k10), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 10 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k11) ELSE MIN(k9) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k10) & 16383)::int) END, 0)::bigint AS b10,
+         COALESCE(CASE WHEN (bit_or(fm) & 2048) <> 0 AND MIN(fk) < COALESCE(MIN(k11), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 11 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k12) ELSE MIN(k10) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k11) & 16383)::int) END, 0)::bigint AS b11,
+         COALESCE(CASE WHEN (bit_or(fm) & 4096) <> 0 AND MIN(fk) < COALESCE(MIN(k12), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 12 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k13) ELSE MIN(k11) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k12) & 16383)::int) END, 0)::bigint AS b12,
+         COALESCE(CASE WHEN (bit_or(fm) & 8192) <> 0 AND MIN(fk) < COALESCE(MIN(k13), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 13 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k14) ELSE MIN(k12) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k13) & 16383)::int) END, 0)::bigint AS b13,
+         COALESCE(CASE WHEN (bit_or(fm) & 16384) <> 0 AND MIN(fk) < COALESCE(MIN(k14), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 14 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k15) ELSE MIN(k13) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k14) & 16383)::int) END, 0)::bigint AS b14,
+         COALESCE(CASE WHEN (bit_or(fm) & 32768) <> 0 AND MIN(fk) < COALESCE(MIN(k15), 9223372036854775807)
+                 THEN GET_BYTE((SELECT fc.b FROM frame_colormap fc), 1536 + GET_BYTE((SELECT fc.b FROM frame_colormap fc), (CASE WHEN ((807151847202229::bigint >> (((cell >> 4) * 13 + (cell & 15) * 16 + 15 + (SELECT t FROM frame_clock)) % 50)::int) & 1) = 1
+                      THEN MIN(k14) ELSE MIN(k14) END & 16383)::int))
+                 ELSE GET_BYTE((SELECT fc.b FROM frame_colormap fc), (MIN(k15) & 16383)::int) END, 0)::bigint AS b15
   FROM view_lanes
   GROUP BY cell
 ),

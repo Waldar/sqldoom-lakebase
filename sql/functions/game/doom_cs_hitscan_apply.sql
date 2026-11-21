@@ -73,6 +73,9 @@ SET armor = ps.armor - a.saved,
     damage_count = LEAST(100, ps.damage_count + CASE WHEN a.blocked THEN 0 ELSE a.dmg-a.saved END),
     alive = GREATEST(0, ps.health - CASE WHEN a.blocked THEN 0 ELSE a.dmg-a.saved END) > 0,
     pain_face_tics = CASE WHEN NOT a.blocked AND a.dmg-a.saved > 0 THEN 12 ELSE ps.pain_face_tics END,
+    -- plyr->attacker: the player who fired (the face turns to it)
+    attacker_id = CASE WHEN NOT a.blocked AND a.dmg-a.saved > 0 THEN doom_cs_hitscan_apply.p_player_thing_id::int
+                       ELSE ps.attacker_id END,
     killer_id = CASE WHEN ps.alive AND NOT a.blocked
                           AND ps.health - (a.dmg-a.saved) <= 0
                      THEN doom_cs_hitscan_apply.p_player_thing_id::int ELSE ps.killer_id END,

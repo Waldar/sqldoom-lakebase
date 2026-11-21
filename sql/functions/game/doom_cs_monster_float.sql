@@ -80,16 +80,18 @@ SET armor = ps.armor - d.saved,
                         THEN ps.health - (d.dmg - d.saved) ELSE ps.death_health END,
     damage_count = LEAST(100, ps.damage_count + (d.dmg - d.saved)),
     pain_face_tics = 12,
+    attacker_id = d.attacker_id,                -- plyr->attacker: the skull (the face turns to it)
     alive = (ps.health - (d.dmg - d.saved)) > 0,
     killer_id = CASE WHEN (ps.health - (d.dmg - d.saved)) <= 0 THEN -1 ELSE ps.killer_id END
 FROM (
-  SELECT ps2.map_id, ps2.player_thing_id, q.dmg,
+  SELECT ps2.map_id, ps2.player_thing_id, q.dmg, q.attacker_id,
          LEAST(ps2.armor, CASE ps2.armor_class WHEN 2 THEN q.dmg / 2 WHEN 1 THEN q.dmg / 3 ELSE 0 END) AS saved
   FROM player_state ps2
   JOIN (
     SELECT ps3.player_thing_id,
            SUM((doom_prandom(t.id, ps3.level_tics, 21) % d.charge_sides + 1)
-               * d.charge_mult)::int AS dmg
+               * d.charge_mult)::int AS dmg,
+           MAX(t.id) AS attacker_id
     FROM monster_ai ai
     JOIN things t ON t.map_id = ai.map_id AND t.id = ai.thing_id
     JOIN thing_combat_defs d ON d.thing_type = t.type AND d.skull_fly
