@@ -32,9 +32,10 @@ FOR _r1 IN WITH events AS (
             SELECT 1 FROM line_activations a
             WHERE a.map_id=e.map_id AND a.line_id=e.line_id
           ) AS stale,
-         (COALESCE(sd.upper_tex,'') LIKE 'SW1%'
-          OR COALESCE(sd.mid_tex,'') LIKE 'SW1%'
-          OR COALESCE(sd.lower_tex,'') LIKE 'SW1%') AS has_switch_texture
+         -- either half of a switch pair (SW2BROWN on E1M4's line 614, below)
+         (COALESCE(sd.upper_tex,'') ~ '^SW[12]'
+          OR COALESCE(sd.mid_tex,'') ~ '^SW[12]'
+          OR COALESCE(sd.lower_tex,'') ~ '^SW[12]') AS has_switch_texture
   FROM line_special_events e
   JOIN linedefs ld ON ld.map_id=e.map_id AND ld.id=e.line_id
   LEFT JOIN line_special_defs d ON d.special=ld.special
@@ -407,8 +408,12 @@ ON CONFLICT (map_id,sector_id) DO UPDATE SET
 WHERE sector_movers.direction=2;
 END IF;
 IF (_cs.flags & 32) <> 0 THEN
--- Remember visible SW1* texture substitutions. Repeatable buttons restore
+-- Remember visible switch texture substitutions. Repeatable buttons restore
 -- after one second; S1/W1 switches stay changed until the stage resets.
+-- P_ChangeSwitchTexture flips either way, SW1* to SW2* or SW2* to SW1*
+-- (2026-11-21): E1M4's soulsphere lift switch (line 614) and E1M6's line
+-- 822 start as SW2BROWN, and pressing them changed nothing and made no
+-- click, so they looked dead while their sector moved.
 -- A restored repeatable button keeps its row at countdown=0; remove that
 -- stale row before reactivation.
 DELETE FROM line_buttons b WHERE b.map_id=doom_cs_activate_specials.p_map_id AND b.countdown=0 AND EXISTS (
@@ -432,24 +437,29 @@ parts AS (
     -- stays pressed (-1).
     CASE WHEN e.one_shot THEN -1 ELSE 35 END AS countdown
   FROM events e JOIN sidedefs sd ON sd.map_id=e.map_id AND sd.id=e.right_sd_id
-  WHERE sd.upper_tex LIKE 'SW1%'
+  WHERE sd.upper_tex LIKE 'SW1%' OR sd.upper_tex LIKE 'SW2%'
   UNION ALL
   SELECT e.map_id,e.line_id,e.right_sd_id,'middle',sd.mid_tex,
     CASE WHEN e.one_shot THEN -1 ELSE 35 END
   FROM events e JOIN sidedefs sd ON sd.map_id=e.map_id AND sd.id=e.right_sd_id
-  WHERE sd.mid_tex LIKE 'SW1%'
+  WHERE sd.mid_tex LIKE 'SW1%' OR sd.mid_tex LIKE 'SW2%'
   UNION ALL
   SELECT e.map_id,e.line_id,e.right_sd_id,'lower',sd.lower_tex,
     CASE WHEN e.one_shot THEN -1 ELSE 35 END
   FROM events e JOIN sidedefs sd ON sd.map_id=e.map_id AND sd.id=e.right_sd_id
-  WHERE sd.lower_tex LIKE 'SW1%'
+  WHERE sd.lower_tex LIKE 'SW1%' OR sd.lower_tex LIKE 'SW2%'
+),
+-- the other texture of the pair, when the WAD has it (Doom's switch list)
+flipped AS (
+  SELECT p.*, (CASE WHEN p.tex LIKE 'SW1%' THEN 'SW2' ELSE 'SW1' END || SUBSTRING(p.tex FROM 4))::varchar(8) AS other
+  FROM parts p
 )
 INSERT INTO line_buttons
   (map_id,line_id,sidedef_id,texture_part,original_tex,active_tex,countdown,
    just_restored)
-SELECT map_id,line_id,sidedef_id,texture_part,tex,
-  ('SW2'||SUBSTRING(tex FROM 4))::varchar(8),countdown,FALSE
-FROM parts;
+SELECT f.map_id,f.line_id,f.sidedef_id,f.texture_part,f.tex,f.other,f.countdown,FALSE
+FROM flipped f
+WHERE EXISTS (SELECT 1 FROM walltex_meta w WHERE w.name = f.other);
 
 WITH changed AS (
   SELECT DISTINCT b.map_id,b.sidedef_id
