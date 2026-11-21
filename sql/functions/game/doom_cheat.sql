@@ -41,6 +41,10 @@ END IF;
 IF _cs.code = 'IDFA' OR _cs.code = 'IDKFA' THEN
   -- The arsenal itself is the same one the menu cheat grants.
   ignored := doom_cheat_arsenal(doom_cheat.p_map_id, doom_cheat.p_player_thing_id);
+  -- ST_Responder: idfa_armor 200 of idfa_armor_class 2 (blue), set, not
+  -- added; idkfa the same (2026-11-21: both left the armor as it was)
+  UPDATE player_state SET armor=200, armor_class=2
+  WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
   message := 'Ammo (no keys) Added';
 END IF;
 IF _cs.code = 'IDKFA' THEN
