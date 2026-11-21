@@ -231,6 +231,34 @@ next_values AS (
   LEFT JOIN thing_ai_frames f
     ON f.thing_type = t.type AND f.state = t.next_state
    AND f.seq_index = t.next_seq
+),
+-- A_FaceTarget (2026-11-21; owner: monsters fire without looking at me).
+-- Every attack frame of Doom's monsters turns the monster to its target,
+-- first (S_POSS_ATK1 and the like) and again as it fires (A_PosAttack,
+-- A_TroopAttack, ... start with A_FaceTarget). Here a monster's angle only
+-- changed when it stepped (doom_cs_monster_move), so one that stopped to
+-- shoot kept its last step's facing, and its sprite showed a side or its
+-- back. A frame of the attack begun this tic: the angle to the target, with
+-- MF_SHADOW's `(P_Random()-P_Random())<<21` when the player has the blur
+-- sphere -- the same numbers as the shot's error (doom_cs_monster_attack's
+-- shadow_err, seeds 15 and 16 at this tic), so it faces where it fires.
+faced AS (
+  UPDATE things t
+  SET angle = mod((degrees(atan2(mt.ty - m.my, mt.tx - m.mx))
+                   + CASE WHEN COALESCE(sh.shadowed, FALSE)
+                          THEN (doom_prandom(n.thing_id, sh.level_tics, 15)
+                                - doom_prandom(n.thing_id, sh.level_tics, 16)) * 360.0
+                               / NULLIF((SELECT c.value FROM doom_constants c WHERE c.name = 'SHADOW_MISS_UNITS'), 0)
+                          ELSE 0.0 END
+                   + 720.0)::numeric, 360)::real
+  FROM next_values n
+  JOIN monsters m ON m.thing_id = n.thing_id
+  JOIN mon_target mt ON mt.thing_id = n.thing_id
+  LEFT JOIN shadow sh ON TRUE
+  WHERE n.advances AND n.next_state = 'missile'
+    AND t.map_id = n.map_id AND t.id = n.thing_id
+    AND (mt.tx <> m.mx OR mt.ty <> m.my)
+  RETURNING t.id
 )
 UPDATE monster_ai ai
 SET state = n.next_state, state_tics = n.next_tics,
