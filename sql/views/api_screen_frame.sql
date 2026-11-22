@@ -193,6 +193,16 @@ clipped AS (
         FROM placed pl JOIN ui_screen_runs sr ON sr.name = pl.name) r
   WHERE r.y BETWEEN 0 AND 199 AND r.x < 320 AND r.x + r.len > 0
 ),
+-- The background cut into its 200 rows once (2026-11-22): joined whole, its
+-- 64,000 bytes rode along with every run and every pixel into the sorts of
+-- the string_aggs below, ~20 MB, which spilled to disk at the frame threads'
+-- work_mem (8 MB): 380 ms a frame with the episode map's animations (44 ms
+-- at 64 MB), so the counting looked slow.
+bg_rows AS MATERIALIZED (
+  SELECT g.y, substring(bg.b FROM g.y * 320 + 1 FOR 320) AS r
+  FROM bg CROSS JOIN generate_series(0, 199) g(y)
+  WHERE bg.b IS NOT NULL
+),
 ordered AS (
   SELECT c.*, MAX(c.x1) OVER (PARTITION BY c.y ORDER BY c.x0, c.z
                               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prev_end
@@ -204,11 +214,11 @@ row_kind AS (
 ),
 -- a row whose runs do not overlap: the background between them, spliced
 spliced AS (
-  SELECT o.y, string_agg(substring(bg.b FROM o.y * 320 + COALESCE(o.prev_end, 0) + 1
+  SELECT o.y, string_agg(substring(br.r FROM COALESCE(o.prev_end, 0) + 1
                                    FOR o.x0 - COALESCE(o.prev_end, 0)) || o.b, ''::bytea ORDER BY o.x0, o.z) AS b
   FROM ordered o
   JOIN row_kind rk ON rk.y = o.y AND NOT rk.overlap
-  CROSS JOIN bg
+  JOIN bg_rows br ON br.y = o.y
   GROUP BY o.y
 ),
 -- a row where patches overlap (the arrow under ENTERING): pixel by pixel,
@@ -221,10 +231,10 @@ pixel_top AS (
   ORDER BY c.y, c.x0 + g.j, c.z DESC, c.x0 DESC
 ),
 pixel_rows AS (
-  SELECT rk.y, string_agg(COALESCE(pt.px, substring(bg.b FROM rk.y * 320 + x.x + 1 FOR 1)),
+  SELECT rk.y, string_agg(COALESCE(pt.px, substring(br.r FROM x.x + 1 FOR 1)),
                           ''::bytea ORDER BY x.x) AS b
   FROM row_kind rk
-  CROSS JOIN bg
+  JOIN bg_rows br ON br.y = rk.y
   CROSS JOIN generate_series(0, 319) x(x)
   LEFT JOIN pixel_top pt ON pt.y = rk.y AND pt.x = x.x
   WHERE rk.overlap
@@ -233,10 +243,9 @@ pixel_rows AS (
 rows_out AS (
   SELECT g.y,
          COALESCE(pr.b,
-                  sp.b || substring(bg.b FROM g.y * 320 + rk.last_end + 1 FOR 320 - rk.last_end),
-                  substring(bg.b FROM g.y * 320 + 1 FOR 320)) AS b
-  FROM generate_series(0, 199) g(y)
-  CROSS JOIN bg
+                  sp.b || substring(g.r FROM rk.last_end + 1 FOR 320 - rk.last_end),
+                  g.r) AS b
+  FROM bg_rows g
   LEFT JOIN row_kind rk ON rk.y = g.y
   LEFT JOIN spliced sp ON sp.y = g.y
   LEFT JOIN pixel_rows pr ON pr.y = g.y
