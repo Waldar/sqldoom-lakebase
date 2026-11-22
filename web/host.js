@@ -431,6 +431,11 @@ function showScreen(sc) {
     : k === 'text' || k === 'picture' || k === 'over' ? 'victor' : null);
   const was = screenKind;
   screenKind = kind;
+  // a page rendering its own frames reads the screen's view meanwhile
+  // (app.js doomScreen); with frames from the app this changes nothing
+  if (!!kind !== !!was) {
+    game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'screen', on: !!kind }, '*');
+  }
   if (track(kind) && track(kind) !== track(was)) {
     game.contentWindow?.postMessage({ source: 'sqldoom-host', action: 'music_reload' }, '*');
   }

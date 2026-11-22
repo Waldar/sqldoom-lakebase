@@ -552,6 +552,8 @@ async function play(user, password, target, nick, guest) {
   // One frame view per slot and map (api_frame_idx_slot<n>_m<map>); the
   // statement over it is prepared under a fresh name whenever the map changes.
   let frameGen = 0, frameName = '', frameMap = -1, frameSql = '';
+  const SCREEN_SQL = 'SELECT frame_rgb FROM api_screen_frame';   // relay.py ALLOWED_SQL
+  let screenOn = false;
   const match = { state: 'playing', map: '', mapId: -1, left: 0, next: '', seconds: 0, waiting: 0, hold: 0 };
   const joinedAt = performance.now();
   const prepareFrame = async () => {
@@ -1256,7 +1258,22 @@ async function play(user, password, target, nick, guest) {
   window.doomSetLowDetail = () => {
     if (!running || frameMap < 0) return;
     frameName = `frame${++frameGen}`;
-    frameSql = `SELECT frame_rgb FROM api_frame_idx_slot${slot}_m${frameMap}${lowDetail ? '_low' : ''}`;
+    frameSql = screenOn ? SCREEN_SQL
+      : `SELECT frame_rgb FROM api_frame_idx_slot${slot}_m${frameMap}${lowDetail ? '_low' : ''}`;
+  };
+  // Single player's screens between levels (host.js showScreen, 2026-11-21):
+  // when the page renders its own frames (no frames from the app, which
+  // draws them by itself), the render connections read api_screen_frame
+  // meanwhile, then their view again. The next map's view comes from
+  // prepareFrame, as at any map change.
+  window.doomScreen = (on) => {
+    on = !!on;
+    if (on === screenOn) return;
+    screenOn = on;
+    if (!running || frameMap < 0) return;
+    frameName = `frame${++frameGen}`;
+    frameSql = on ? SCREEN_SQL
+      : `SELECT frame_rgb FROM api_frame_idx_slot${slot}_m${frameMap}${lowDetail ? '_low' : ''}`;
   };
   resizePool(renderConns);
   frameClock();
@@ -1383,6 +1400,7 @@ async function setup() {
       // single player's screens between levels began: their track (D_INTER,
       // D_VICTOR) from api_stage_music, as at a map change
       if (m.action === 'music_reload' && window.doomMusic) window.doomMusic();
+      if (m.action === 'screen' && window.doomScreen) window.doomScreen(!!m.on);
       if (m.action === 'music_volume') {
         const v = Number(m.v);
         if (v >= 0 && v <= 1) { musicVolume = v; if (window.doomMusicVolume) window.doomMusicVolume(v); }

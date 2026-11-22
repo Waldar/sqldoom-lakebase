@@ -97,6 +97,10 @@ UI_PATCH_NAMES = (
     "WINUM0", "WINUM1", "WINUM2", "WINUM3", "WINUM4",
     "WINUM5", "WINUM6", "WINUM7", "WINUM8", "WINUM9",
 ) + tuple(
+    # Episode 1's map, its ten moving parts of three frames each
+    # (wi_stuff.c epsd0animinfo, WIA0<anim><frame>; 2026-11-21)
+    f"WIA0{j:02d}{i:02d}" for j in range(10) for i in range(3)
+) + tuple(
     # Level-name banners, ExMy -> WILV(x-1)(y-1).
     f"WILV{e}{m}" for e in range(4) for m in range(9)
 ) + tuple(

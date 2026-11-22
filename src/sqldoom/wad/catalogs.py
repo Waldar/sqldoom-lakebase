@@ -81,6 +81,11 @@ def create_frame_views(cur):
 def materialize_ui_pixels(cur):
     cur.execute("REFRESH MATERIALIZED VIEW ui_hud_pixels")
     cur.execute("REFRESH MATERIALIZED VIEW ui_static_pixels")
+    # the screens between levels' patches (api_screen_frame), once the game's
+    # SQL has made it (a backfill after the install, tools/backfill_texture_masks.py)
+    cur.execute("SELECT to_regclass('ui_screen_runs') IS NOT NULL")
+    if cur.fetchone()[0]:
+        cur.execute("REFRESH MATERIALIZED VIEW ui_screen_runs")
 
 
 def materialize_render_things(cur, map_id=None):

@@ -109,6 +109,9 @@ ALLOWED_SQL = frozenset({
     "SELECT name, audio_data, audio_format FROM api_music_track($1)",   # idmus
     "SELECT x1, y1, x2, y2, solid FROM api_map_geometry",
     "SELECT kind, name, x, y, angle, alive FROM api_things_live WHERE map_id = $1",
+    # single player's screens between levels, when the page renders its own
+    # frames (no frames from the app): read-only, NULL outside them
+    "SELECT frame_rgb FROM api_screen_frame",
 })
 ALLOWED_RE = re.compile(r"SELECT frame_rgb FROM api_frame_idx_slot[1-4]_m\d{1,3}(_low)?")
 # Frontend messages a page may send: Query, Parse, Bind, Execute, Describe,

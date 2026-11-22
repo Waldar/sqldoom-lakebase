@@ -17,6 +17,7 @@ DECLARE
   p integer;
   sounds text[];
   result text;
+  restart_anims boolean;
   _r1 record;
 BEGIN
 
@@ -45,6 +46,7 @@ END IF;
 accel := COALESCE(doom_solo_screen_tic.p_accel, FALSE);
 bcnt := r.tics + 1;
 sounds := ARRAY[]::text[];
+restart_anims := FALSE;
 
 IF r.screen = 'finale' THEN
   IF r.finale_stage >= 2 THEN
@@ -98,6 +100,7 @@ IF _cs.st <= 10 THEN
     IF _cs.accel THEN
       sounds := sounds || 'DSSGCOCK'::text;
       st := 11; cnt := 140;          -- WI_initShowNextLoc: SHOWNEXTLOCDELAY * TICRATE
+      restart_anims := TRUE;         -- and WI_initAnimatedBack again
     END IF;
   ELSIF _cs.st % 2 = 1 THEN
     cnt := _cs.cnt - 1;
@@ -113,7 +116,11 @@ END IF;
 
 UPDATE screen_state
 SET sp_state = _cs.st, cnt_pause = _cs.cnt, tics = _cs.bcnt, accelerate = FALSE,
-    kills_pct = _cs.k, items_pct = _cs.i, secrets_pct = _cs.s, time_secs = _cs.t, par_secs = _cs.p
+    kills_pct = _cs.k, items_pct = _cs.i, secrets_pct = _cs.s, time_secs = _cs.t, par_secs = _cs.p,
+    anim_base = CASE WHEN _cs.restart_anims THEN _cs.bcnt ELSE anim_base END,
+    anim_rnd = CASE WHEN _cs.restart_anims
+                    THEN ARRAY(SELECT floor(random() * 11)::int FROM generate_series(1, 10))
+                    ELSE anim_rnd END
 WHERE id = 0;
 
 -- The screen's sounds: no origin, so centred at full volume (api_sound_events).

@@ -21,7 +21,8 @@ WITH s AS MATERIALIZED (
   SELECT ss.screen::text AS screen, ss.inter_episode AS ep, ss.inter_level AS lv, ss.inter_next AS nx,
          ss.sp_state AS st, ss.cnt_pause AS cnt,
          ss.kills_pct AS k, ss.items_pct AS i, ss.secrets_pct AS sc, ss.time_secs AS t, ss.par_secs AS p,
-         ss.did_secret, ss.finale_episode AS fep, ss.finale_count AS fc, ss.finale_stage AS fst
+         ss.did_secret, ss.finale_episode AS fep, ss.finale_count AS fc, ss.finale_stage AS fst,
+         ss.tics AS bcnt, ss.anim_base, ss.anim_rnd
   FROM screen_state ss
   WHERE ss.id = 0 AND ss.screen IN ('intermission', 'finale')
 ),
@@ -38,6 +39,23 @@ stats AS (
 ),
 nextloc AS (
   SELECT * FROM s WHERE s.screen = 'intermission' AND s.st > 10
+),
+-- wi_stuff.c epsd0animinfo: episode 1's ten moving parts, three frames each
+-- every TICRATE / 3 (11 tics), patches WIA0<anim><frame> (2026-11-21)
+anim_loc (j, x, y) AS (
+  VALUES (0, 224, 104), (1, 184, 160), (2, 112, 136), (3, 72, 112), (4, 88, 96),
+         (5, 64, 48), (6, 192, 40), (7, 136, 16), (8, 80, 16), (9, 64, 24)
+),
+-- WI_updateAnimatedBack: an animation's first frame at anim_base + 1 + its
+-- random start, the next every 11 tics, round and round; WI_drawAnimatedBack
+-- draws it (nothing before its first frame)
+anims AS (
+  SELECT 'WIA0' || lpad(a.j::text, 2, '0') || lpad((((s.bcnt - a.start) / 11) % 3)::text, 2, '0') AS name,
+         a.x, a.y
+  FROM s
+  CROSS JOIN LATERAL (SELECT l.j, l.x, l.y, s.anim_base + 1 + COALESCE(s.anim_rnd[l.j + 1], 0) AS start
+                      FROM anim_loc l) a
+  WHERE s.screen = 'intermission' AND s.ep = 1 AND s.bcnt >= a.start
 ),
 -- the figures shown so far (-1: not yet), right edge x and line y
 nums AS (
@@ -73,8 +91,11 @@ glyphs AS (
 -- every patch drawn, in V_DrawPatch's coordinates (before the patch's
 -- offsets); z: a later layer covers an earlier one
 layers AS (
+  -- WI_drawAnimatedBack, under everything else (drawn right after the background)
+  SELECT 0 AS z, an.name, an.x, an.y FROM anims an
+  UNION ALL
   -- WI_drawLF: the finished level's name, centred, FINISHED under it
-  SELECT 1 AS z, ln.name, (320 - ln.width) / 2 AS x, 2 AS y
+  SELECT 1, ln.name, (320 - ln.width) / 2, 2
   FROM stats st JOIN pw ln ON ln.name = 'WILV' || (st.ep - 1)::text || (st.lv - 1)::text
   UNION ALL
   SELECT 1, f.name, (320 - f.width) / 2, 2 + (5 * ln.height) / 4

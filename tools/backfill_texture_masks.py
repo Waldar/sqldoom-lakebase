@@ -10,6 +10,8 @@
   before: Doom's face shows them when hit head-on or holding fire.
 * HELP2 (ui_patches, 2026-11-21): the picture after Episode 1's end text in
   the shareware game (api_screen_frame; without it, CREDIT is shown).
+* WIA00000-WIA00902 (ui_patches, 2026-11-21): the moving parts of Episode
+  1's intermission map (without them, the map stands still).
 
 Data, not code: the installer adds the column, not its content. Run it on
 game-template (new games copy it) and on production (a future template is
@@ -26,7 +28,8 @@ from sqldoom.lakebase.connection import CREDS
 from sqldoom.wad import loader
 from sqldoom.wad.catalogs import materialize_ui_pixels
 
-FACES = tuple(f"STFKILL{i}" for i in range(5)) + ("HELP2",)
+FACES = (tuple(f"STFKILL{i}" for i in range(5)) + ("HELP2",)
+         + tuple(f"WIA0{j:02d}{i:02d}" for j in range(10) for i in range(3)))
 
 
 def backfill(cur, wad_path, log=print):

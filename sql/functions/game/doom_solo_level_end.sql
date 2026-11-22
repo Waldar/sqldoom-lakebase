@@ -126,7 +126,9 @@ SET screen = 'intermission', cursor_index = 0,
     tgt_time = (_cs.tics / 35)::int,
     tgt_par = (_cs.par_tics / 35)::int,
     kills_pct = -1, items_pct = -1, secrets_pct = -1, time_secs = -1, par_secs = -1,
-    sp_state = 1, cnt_pause = 35, accelerate = FALSE, tics = 0
+    sp_state = 1, cnt_pause = 35, accelerate = FALSE, tics = 0,
+    -- WI_initAnimatedBack: each animation's random start in its period (11 tics)
+    anim_base = 0, anim_rnd = ARRAY(SELECT floor(random() * 11)::int FROM generate_series(1, 10))
 WHERE s.id = 0;
 RETURN 'stats';
 END _cs;
