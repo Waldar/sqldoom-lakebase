@@ -180,6 +180,7 @@ SET direction=n.computed_direction,countdown=n.computed_countdown,
 FROM next_state n
 WHERE mover.map_id=n.map_id AND mover.sector_id=n.sector_id
 RETURNING n.map_id,n.sector_id,n.mover_type::text AS mover_type,n.speed >= 4 AS blazing,n.fresh,
+          n.ceil_height,n.top_height,
           n.direction AS old_dir,n.move_direction,n.computed_direction AS new_dir
 )
 -- The movers' one-shot sounds (2026-11-20; until then every moving door and
@@ -199,7 +200,12 @@ JOIN sector_sound_origins so ON so.map_id=mv.map_id AND so.sector_id=mv.sector_i
 JOIN player_state ps ON ps.map_id=mv.map_id AND ps.player_thing_id=doom_cs_doors.p_player_thing_id::int
 CROSS JOIN LATERAL (SELECT CASE
   WHEN mv.mover_type LIKE 'door%' THEN CASE
-    WHEN mv.fresh AND mv.old_dir=1 THEN CASE WHEN mv.blazing THEN 'DSBDOPN' ELSE 'DSDOROPN' END
+    -- EV_DoDoor opens with sfx_doropn only `if (door->topheight !=
+    -- sec->ceilingheight)`: another W1 line of the same tag crossed after the
+    -- door is open (the four around E1M6's red key) starts it again silently
+    -- (2026-11-24; it played the opening sound of every sector of the tag).
+    WHEN mv.fresh AND mv.old_dir=1 AND mv.ceil_height <> mv.top_height
+      THEN CASE WHEN mv.blazing THEN 'DSBDOPN' ELSE 'DSDOROPN' END
     WHEN mv.fresh AND mv.old_dir=-1 THEN CASE WHEN mv.blazing THEN 'DSBDCLS' ELSE 'DSDORCLS' END
     WHEN mv.old_dir=-1 AND mv.move_direction=1 THEN 'DSDOROPN'
     WHEN mv.old_dir=0 AND mv.new_dir=-1 THEN CASE WHEN mv.blazing THEN 'DSBDCLS' ELSE 'DSDORCLS' END
