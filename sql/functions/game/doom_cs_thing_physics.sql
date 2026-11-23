@@ -45,7 +45,7 @@ WITH
 moving AS (
   SELECT t.id, t.x::float8 AS x, t.y::float8 AS y,
          t.mom_x::float8 AS mx, t.mom_y::float8 AS my,
-         cd.radius::float8 AS radius,
+         cd.radius::float8 AS radius, cd.height::float8 AS height,
          -- MF_SKULLFLY: steps do not stop it and it keeps its speed until
          -- it hits something
          cd.skull_fly AS skull,
@@ -63,25 +63,47 @@ moving AS (
                     WHERE ps.map_id = t.map_id AND ps.player_thing_id = t.id)
 ),
 -- P_TryMove's line check: the step is refused if it crosses a one-sided line,
--- an explicitly blocking one, or a step too tall to climb. Bounded by the two
--- bounding boxes overlapping, the same way the monster mover bounds its own.
+-- an explicitly blocking one, a step too tall to climb or an opening too low
+-- (a closed door), or if it would bring the thing's body (its radius, as
+-- PIT_CheckLine tests the thing's box) onto such a line. Until 2026-11-24 only
+-- the centre's path was tested, so a rocket's shove could push a monster's
+-- centre to within a few units of a wall, where every step it then tried
+-- touched the wall: stuck in the wall for good. A thing already touching a
+-- line may still move away from it. Bounded by the two bounding boxes
+-- overlapping, the same way the monster mover bounds its own.
 wall_hit AS (
   SELECT m.id, TRUE AS hit
   FROM moving m
   JOIN linedef_geom ld ON ld.map_id = doom_cs_thing_physics.p_map_id
   LEFT JOIN sectors fr ON fr.map_id = ld.map_id AND fr.id = ld.fsec
   LEFT JOIN sectors bk ON bk.map_id = ld.map_id AND bk.id = ld.bsec
+  CROSS JOIN LATERAL (
+    SELECT
+      sqrt(power(m.x+m.mx - (ld.x1 + u1.u*(ld.x2-ld.x1)), 2)
+         + power(m.y+m.my - (ld.y1 + u1.u*(ld.y2-ld.y1)), 2)) AS d_new,
+      sqrt(power(m.x - (ld.x1 + u0.u*(ld.x2-ld.x1)), 2)
+         + power(m.y - (ld.y1 + u0.u*(ld.y2-ld.y1)), 2)) AS d_old
+    FROM (SELECT LEAST(1.0, GREATEST(0.0,
+            ((m.x+m.mx - ld.x1)*(ld.x2-ld.x1) + (m.y+m.my - ld.y1)*(ld.y2-ld.y1))
+            / NULLIF(power(ld.x2-ld.x1, 2) + power(ld.y2-ld.y1, 2), 0)))::float8 AS u) u1,
+         (SELECT LEAST(1.0, GREATEST(0.0,
+            ((m.x - ld.x1)*(ld.x2-ld.x1) + (m.y - ld.y1)*(ld.y2-ld.y1))
+            / NULLIF(power(ld.x2-ld.x1, 2) + power(ld.y2-ld.y1, 2), 0)))::float8 AS u) u0
+  ) gap
   WHERE (ld.left_sd_id = -1 OR ld.right_sd_id = -1 OR (ld.flags & 1) <> 0
       OR (NOT m.skull AND fr.floor_height IS NOT NULL AND bk.floor_height IS NOT NULL
-          AND ABS(fr.floor_height - bk.floor_height) > _cs.max_step))
+          AND ABS(fr.floor_height - bk.floor_height) > _cs.max_step)
+      OR (fr.ceil_height IS NOT NULL AND bk.ceil_height IS NOT NULL
+          AND LEAST(fr.ceil_height, bk.ceil_height) - GREATEST(fr.floor_height, bk.floor_height) < m.height))
     AND LEAST(ld.x1,ld.x2) <= GREATEST(m.x, m.x+m.mx) + m.radius
     AND GREATEST(ld.x1,ld.x2) >= LEAST(m.x, m.x+m.mx) - m.radius
     AND LEAST(ld.y1,ld.y2) <= GREATEST(m.y, m.y+m.my) + m.radius
     AND GREATEST(ld.y1,ld.y2) >= LEAST(m.y, m.y+m.my) - m.radius
-    AND ((m.x+m.mx - ld.x1)*(ld.y2-ld.y1) - (m.y+m.my - ld.y1)*(ld.x2-ld.x1))
-      * ((m.x - ld.x1)*(ld.y2-ld.y1) - (m.y - ld.y1)*(ld.x2-ld.x1)) < 0
-    AND ((ld.x1 - m.x)*m.my - (ld.y1 - m.y)*m.mx)
-      * ((ld.x2 - m.x)*m.my - (ld.y2 - m.y)*m.mx) < 0
+    AND ((gap.d_new < m.radius AND gap.d_new < gap.d_old)
+      OR (((m.x+m.mx - ld.x1)*(ld.y2-ld.y1) - (m.y+m.my - ld.y1)*(ld.x2-ld.x1))
+          * ((m.x - ld.x1)*(ld.y2-ld.y1) - (m.y - ld.y1)*(ld.x2-ld.x1)) < 0
+        AND ((ld.x1 - m.x)*m.my - (ld.y1 - m.y)*m.mx)
+          * ((ld.x2 - m.x)*m.my - (ld.y2 - m.y)*m.mx) < 0))
   GROUP BY m.id
 ),
 -- PIT_CheckThing: and it stops on anything solid standing where it is going.

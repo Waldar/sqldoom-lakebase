@@ -46,16 +46,20 @@ shadow AS (
 chasers AS (
   SELECT ai.thing_id, t.x::double precision AS mx, t.y::double precision AS my,
          d.radius::double precision AS radius,
-         d.floats, ai.movedir, ai.movecount
+         d.floats, ai.movedir, ai.movecount,
+         COALESCE(mc.speed, _cs.monster_step)::double precision AS speed
   FROM monster_ai ai
   JOIN params p ON ai.map_id = p.map_id
   JOIN things t ON t.map_id = ai.map_id AND t.id = ai.thing_id
   JOIN thing_combat_defs d ON d.thing_type = t.type
+  LEFT JOIN monster_chase_defs mc ON mc.thing_type = t.type
   JOIN thing_ai_frames f ON f.thing_type=t.type AND f.state='see'
     AND f.seq_index=ai.seq_index
+  -- A_Chase at the frame's start, and again half-way through the frames that
+  -- stand for two of Doom's run states (monster_chase_defs.calls_per_frame)
   WHERE ai.state='see' AND NOT d.explodes
     AND (ai.state_tics=f.tics
-      OR ai.state_tics=FLOOR(f.tics/2.0)::int)
+      OR (COALESCE(mc.calls_per_frame, 2) = 2 AND ai.state_tics=FLOOR(f.tics/2.0)::int))
 ),
 mon_target AS MATERIALIZED (
   SELECT ai.thing_id,
@@ -71,7 +75,7 @@ mon_target AS MATERIALIZED (
   LEFT JOIN things tt ON tt.map_id = ai.map_id AND tt.id = th.thing_id
 ),
 walk AS (
-  SELECT c.thing_id, c.mx, c.my, c.radius, c.floats, c.movedir, c.movecount,
+  SELECT c.thing_id, c.mx, c.my, c.radius, c.floats, c.movedir, c.movecount, c.speed,
          old.opposite AS turnaround,
          CASE WHEN mt.tx - c.mx >  _cs.chase_deadband THEN 0
               WHEN mt.tx - c.mx < -_cs.chase_deadband THEN 4 END AS dx_dir,
@@ -114,7 +118,8 @@ ranked AS (
 ),
 desired AS (
   SELECT r.pri, w.thing_id, w.mx, w.my, w.radius, w.floats,
-         w.mx + _cs.monster_step * d.dx AS nx, w.my + _cs.monster_step * d.dy AS ny,
+         -- one A_Chase stride: mobjinfo's speed (monster_chase_defs, 2026-11-24)
+         w.mx + w.speed * d.dx AS nx, w.my + w.speed * d.dy AS ny,
          d.angle AS face_angle, d.dir,
          CASE WHEN r.pri = -1 THEN w.movecount - 1
               ELSE w.fresh_movecount END AS next_movecount
@@ -206,8 +211,12 @@ wall_block AS MATERIALIZED (
   -- candidate's step box, then apply the live blocking rule (sector heights)
   -- only to the few walls found, instead of testing every blocking wall of
   -- the map against every candidate.
+  -- A step that would bring the body onto a blocking line is refused, as
+  -- PIT_CheckLine refuses it; one that takes a monster already touching a line
+  -- (a door that closed on its edge, a lift that dropped beside it) further
+  -- from it is not, or that monster would never move again (2026-11-24).
   SELECT c.pri, c.thing_id,
-         BOOL_OR(dd.dist < c.radius OR xing.intersects) AS blocked
+         BOOL_OR((dd.dist < c.radius AND dd.dist <= dd0.dist) OR xing.intersects) AS blocked
   FROM candidates c
   CROSS JOIN params p
   JOIN linedef_geom ld
@@ -243,6 +252,12 @@ wall_block AS MATERIALIZED (
   CROSS JOIN LATERAL (
     SELECT sqrt((c.cx - (b.x1 + lt.t * (b.x2 - b.x1)))^2 + (c.cy - (b.y1 + lt.t * (b.y2 - b.y1)))^2) AS dist
   ) dd
+  CROSS JOIN LATERAL (
+    SELECT sqrt((c.old_x - (b.x1 + t0.t * (b.x2 - b.x1)))^2 + (c.old_y - (b.y1 + t0.t * (b.y2 - b.y1)))^2) AS dist
+    FROM (SELECT LEAST(1.0, GREATEST(0.0,
+      ((c.old_x - b.x1) * (b.x2 - b.x1) + (c.old_y - b.y1) * (b.y2 - b.y1))
+      / NULLIF((b.x2 - b.x1) * (b.x2 - b.x1) + (b.y2 - b.y1) * (b.y2 - b.y1), 0.0))) AS t) t0
+  ) dd0
   CROSS JOIN LATERAL (
     SELECT
       (c.old_x - b.x1) * (b.y2 - b.y1) - (c.old_y - b.y1) * (b.x2 - b.x1) AS d1,
