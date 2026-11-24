@@ -905,15 +905,15 @@ def _child(samples, dsn, commands=None, env=None):
     sys.exit(server.main())
 
 
-# --- status-bar cache writer ---------------------------------------------------
-# Frames take the status bar from hud_cache when its key matches the live HUD
-# state (the doom_hudkey_slot<S>_m<M> views) and draw it themselves otherwise, so
-# this worker is only an accelerator: every DOOM_HUD_INTERVAL_MS (default 100,
-# 0 = off) it checks each seated slot of the current map (key only, ~2.5 ms)
-# and redraws the cached bar (~20 ms) when the key changed. Its own
-# connection, so it never sits inside a tic.
+# --- status-bar cache writer (off by default) ----------------------------------
+# Writes hud_cache: every DOOM_HUD_INTERVAL_MS (0 = off, the default since
+# 2026-11-24) it checks each seated slot of the current map (the
+# doom_hudkey_slot<S>_m<M> key, ~1.5 ms) and redraws the cached bar (~20 ms)
+# when the key changed, on its own connection. No frame view reads hud_cache
+# any more: the frames draw the status bar themselves, and taking it from the
+# cache measured ~0.5 ms of a 55 ms frame (E1M9, 2026-11-24).
 def _start_hud_worker(dsn):
-    interval = int(os.environ.get("DOOM_HUD_INTERVAL_MS", "100")) / 1000.0
+    interval = int(os.environ.get("DOOM_HUD_INTERVAL_MS", "0")) / 1000.0
     if interval <= 0:
         return
 

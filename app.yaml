@@ -28,8 +28,11 @@ env:
   - name: DOOM_RENDER_CONNS
     value: "4"
   # Status-bar cache writer (sqldoom/game/referee.py): check interval, 0 = off.
+  # Off since 2026-11-24: no frame view reads hud_cache any more, and taking
+  # the bar from it measured ~0.5 ms of a 55 ms frame, while the writer spent
+  # 1.5 ms a slot every 100 ms on its key and ~20 ms on each redraw.
   - name: DOOM_HUD_INTERVAL_MS
-    value: "100"
+    value: "0"
   - name: DOOM_MAX_FPS
     value: "35"
   # The referee runs as the shared owner of the doom schema (setup/doom_owner.sql).
