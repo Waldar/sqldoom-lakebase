@@ -79,6 +79,32 @@ occupied_sectors AS (
    AND h.alive
   JOIN render_things rt ON rt.map_id=ai.map_id AND rt.thing_id=ai.thing_id
   UNION
+  -- A monster whose body reaches under a closing ceiling from the next sector
+  -- (2026-11-25): PIT_ChangeSector tests every mobj whose box touches the
+  -- sector, so a door closing on a monster's edge goes back up too. Until
+  -- then only the centre's sector counted, and the door came down on a
+  -- monster standing in its doorway, which then could not walk away. The
+  -- body is the thing's radius around its centre, as in the monsters'
+  -- moves; only the lines of a sector whose ceiling is closing are tested.
+  SELECT DISTINCT m.sector_id
+  FROM sector_movers m
+  JOIN params p ON m.map_id=p.map_id
+  JOIN linedef_geom lg ON lg.map_id=m.map_id AND m.sector_id IN (lg.fsec, lg.bsec)
+  JOIN monster_ai ai ON ai.map_id=m.map_id
+  JOIN thing_health h ON h.map_id=ai.map_id AND h.thing_id=ai.thing_id AND h.alive
+  JOIN things t ON t.map_id=ai.map_id AND t.id=ai.thing_id
+  JOIN thing_combat_defs cd ON cd.thing_type=t.type
+  CROSS JOIN LATERAL (
+    SELECT LEAST(1.0, GREATEST(0.0,
+      ((t.x - lg.x1)::float8*(lg.x2 - lg.x1) + (t.y - lg.y1)::float8*(lg.y2 - lg.y1))
+      / NULLIF(power(lg.x2 - lg.x1, 2) + power(lg.y2 - lg.y1, 2), 0)))::float8 AS u
+  ) seg
+  WHERE m.plane='ceiling' AND m.direction=-1
+    AND t.x BETWEEN LEAST(lg.x1, lg.x2) - cd.radius AND GREATEST(lg.x1, lg.x2) + cd.radius
+    AND t.y BETWEEN LEAST(lg.y1, lg.y2) - cd.radius AND GREATEST(lg.y1, lg.y2) + cd.radius
+    AND power(t.x - (lg.x1 + seg.u*(lg.x2 - lg.x1)), 2)
+      + power(t.y - (lg.y1 + seg.u*(lg.y2 - lg.y1)), 2) < power(cd.radius, 2)
+  UNION
   -- The other players of a deathmatch; this player is player_sector above.
   SELECT ps.sector_id
   FROM player_state ps JOIN params p ON ps.map_id=p.map_id
