@@ -76,17 +76,18 @@ The details, the steps the notebook automates and troubleshooting are in [docs/D
 
 ## Performance today
 
-Budget: 28.6 ms per tic (35 tics/s).
+Budget: 28.6 ms per tic (35 tics/s). Postgres 19 on Lakebase, 2026-11-20.
 
 | Measure | Result |
 | --- | --- |
-| Tic, E1M1, 1 player (8 CU) | about 11 ms |
-| Tic, E1M1 Ultra-Violence, 22 monsters awake (8 CU) | 20.4 ms mean (was 26.9) |
-| Tic, E1M9, 1 player, about 25 monsters awake (32 CU, live) | 33-35 ms mean (was 38-40) |
-| Frame, full detail (server) | about 160-170 ms |
-| Frame, low detail (server) | about 90 ms |
+| Live game in the browser, single player, full detail | 35.1-35.7 frames/s, tic p50 14.3-14.6 ms |
+| Input to picture, live (key press to the first frame that shows it) | p50 111-115 ms, p90 131-133 ms |
+| Tic, E1M1 with combat, 22 monsters awake (24 CU) | p50 12.9 ms, p90 17.7 ms |
+| Tic, E1M9 with combat, 52 monsters awake (24 CU) | p50 21.2 ms, p90 26.1 ms |
+| Frame, full detail (server, 12 E1M9 poses, 24 CU) | 40.1 ms |
+| Frame, low detail (server, same poses) | 29.3 ms |
 
-The big maps (E1M6, E1M9: 120-140 monsters) are still above the tic budget in fights. Details and the full history of fixes: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+The heaviest fights on the big maps can still go past the budget (E1M9 with combat: p99 31-36 ms). Details and the full history of fixes: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Validation method
 
