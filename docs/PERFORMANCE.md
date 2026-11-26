@@ -39,7 +39,7 @@ The slot change has one visible effect: `doom_cs_weapon` ages bullet puffs and b
 | Floor and ceiling textures joined on an integer id resolved per span (762 rows) instead of a text key per pixel (37K rows) | p50 406 -> 347 ms | 60 frames identical |
 | 12 Postgres rewrites of the renderer | server p50 298 -> 187 ms, mean 356 -> 216 ms (8 CU) | 14 poses identical |
 | Review patches: sprite and weapon patches decoded once per frame, an optimizer hack for the original engine removed (it disabled the `render_segs` primary key and scanned 261K rows per frame), each wall texture decompressed once, BSP visibility once per frame | E1M1 232 -> 170 ms, E1M6 503 -> 189 ms (worst pose 1346 -> 299 ms), planning 79 -> 51 ms | 10 poses, indexed, low detail and RGB |
-| Status-bar cache: a referee worker renders the status bar every 100 ms into `hud_cache` per seat; frames reuse the bytes while its key matches | -10 ms per frame | 0 mismatches on 30 states |
+| Status-bar cache: a referee worker renders the status bar every 100 ms into `hud_cache` per seat; frames reuse the bytes while its key matches (2026-11-24: no frame view reads it any more, the writer is off, see "Frame profile on Postgres 19") | -10 ms per frame | 0 mismatches on 30 states |
 | Low-detail mode: 160 scene columns with `generate_series(lo, hi, 2)` (a `WHERE x % 2 = 0` filter made the planner estimate 0.5% of rows and was 48% slower than full detail) | p50 108 ms (-34%) | |
 | Frame tail: depth by `DISTINCT ON`, colormap as one 256-byte row per palette and light level (`colormap_idx_lvl`), holes filled by one join over all pixels | full 182.6 -> 167.5 ms, low 105.6 -> 91.2 ms | 13 poses identical |
 | Frame plan prepared once per connection | planning 0.06 ms per frame | |
@@ -103,6 +103,17 @@ The frame socket carries about 2.2 MB/s before the WebSocket's deflate, and XOR 
 
 The referee's re-plan 60 s into a map (ANALYZE + DISCARD PLANS) costs a few slow tics while the tic statements are planned again: in the 17:18 snapshot, 5 s after the re-plan on E1M8, tic p99 63.7 ms, max 88.4 ms, 3 over budget, p50 unchanged at 14.3 ms.
 
+## Frame profile on Postgres 19, 2026-11-24
+
+The heaviest of 6-13 poses per map (E1M9, E1M8, E1M3, E1M1) on a 16 CU scratch branch of `game-template`, with the frame threads' settings (JIT off, generic plans, 8 MB `work_mem`): 52-60 ms a frame. Each of the view's 86 steps timed by cutting the query after it: floors and ceilings ~20-25 ms (the largest part), the merge into 16-row cells and the resolved pixels ~20 ms, walls ~8-11 ms, the thing list and projection ~3-7 ms, the weapon ~1-3.5 ms, a fixed base of ~3 ms. Depth and light are already computed once per plane height and light row (`plane_depths`, from `doom_zlight_lut()`); what remains per pixel is the texture coordinates and one `GET_BYTE`.
+
+| Change | Where | Result | Check |
+| --- | --- | --- | --- |
+| Status-bar cache writer off (`b24e285`): no frame view reads `hud_cache`; taking the bar from it measured 0.5 ms of a 55 ms frame, while the writer spent 1.5 ms a slot every 100 ms on its key and ~20 ms a redraw | `app.yaml` (`DOOM_HUD_INTERVAL_MS` 0, also the code's default), `referee.py` | frames unchanged, database work removed | the cached bar was byte-identical to the frame's |
+| Never-taken texel checks removed (`a5177bf`): a flat or sky smaller than it should be, or a wall span that is not `texel_safe`, now draws nothing instead of a per-pixel bounds-checked read (all 54 flats are 64x64, every sky whole, no unsafe span in 108 poses); the branches stay commented out in the templates | both frame-view templates (`make_low_detail.py --check` passes) | about 1% with prepared statements: E1M9 55.02 -> 54.29 ms, E1M3 59.66 -> 59.04, E1M1 53.50 -> 52.89, E1M8 52.38 -> 51.85 (2-3% as one-off queries) | 72 frames byte-identical (8 poses on each map) |
+
+Live, the owner's browser on a heavy E1M9 scene: 34.5 frames/s, 75 ms a frame with 3 render threads (the page wanted 4), tic p50 25.3 / p99 34.5 ms with 20 tics over budget, input to picture p50 129 ms, with about 40% of the branch's CPU idle. A frame is one Postgres process, so idle cores do not shorten it, and Postgres cannot reserve a CPU for the tic.
+
 ## Maintenance and planner stability
 
 * **Plan invalidation.** Any VACUUM or ANALYZE of a table a cached plan reads forces a re-plan (15-110 ms spikes; a VACUUM every tic costs about 13 ms per tic on E1M9). Auto-ANALYZE is off on the per-tic tables; the referee runs ANALYZE and `DISCARD PLANS` once after a map change.
@@ -116,6 +127,9 @@ The referee's re-plan 60 s into a map (ANALYZE + DISCARD PLANS) costs a few slow
 
 | Idea | Result |
 | --- | --- |
+| No-shimmer frame view (2026-11-24): the final merge without its 16 spectre-shimmer tests, used when no spectre is near the view and nobody has the blur sphere | byte-identical on 106 frames of the 5 maps with spectres and 2.7% faster alone, but choosing it inside one view (`UNION ALL` behind a one-time test) cost about 3 ms a frame more than it saved; choosing it in the app a frame late could miss a spectre for one frame |
+| `REPACK` / `REPACK (CONCURRENTLY)` instead of `VACUUM FULL` (2026-11-26, both run on Lakebase Postgres 19) | 8,400 E1M9 combat tics grew the 30 game tables only 385 -> 507 pages, tics not slower. One pass while the tic ran (no frames): plain `VACUUM` 146 ms, 3 tics over budget; `REPACK (CONCURRENTLY)` 3.6 s, 11 over, max tic 73 ms, refused on `monster_attack_damage` (no primary key or unique index); plain `REPACK` 421 ms, 11 over. Kept the referee's schedule |
+| Read replicas for the frames, to give the tic its own compute | ruled out by the owner: tried in an older version (see below), the lag made the game unplayable |
 | `enable_nestloop = off` on all tic functions, or on 12 other heavy ones | slower or noise (projectiles +40 ms) |
 | Hashed `NOT IN` in monster step | faster under `EXPLAIN ANALYZE`, not in the game |
 | Sight lines as `EXISTS` (with or without `MATERIALIZED`) | 42.8-100 ms, worse |

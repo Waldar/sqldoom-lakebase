@@ -17,7 +17,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
   in flight)                          frame deltas + deflate
                                      game manager (sqldoom.lakebase.games): one branch per game
                                      referee per game (child process, sqldoom.game): the game
-                                       loop, 35 tics/s, VACUUM policy, status-bar cache, rules
+                                       loop, 35 tics/s, VACUUM policy, rules
                                           |
                                           v
         Lakebase project (Postgres 19)
@@ -42,7 +42,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
 | `sql/seed/` | The game's definitions (things, weapons, line specials, menus, constants) and each mode's default rules, loaded with the maps |
 | `src/sqldoom/db/` | Installs and upgrades the database from `sql/`: pending migrations, then the code when it changed (`doom.schema_version`) |
 | `src/sqldoom/wad/` | Loads a Doom WAD (palettes, textures, sprites, sounds, music, maps) into the tables, then the derived data and the frame views |
-| `src/sqldoom/game/` | The game loop (`server.py`), its supervisor (`referee.py`: VACUUM policy, map changes, loading screen, status-bar cache) and its statements |
+| `src/sqldoom/game/` | The game loop (`server.py`), its supervisor (`referee.py`: VACUUM policy, map changes, loading screen; its status-bar cache writer is off by default since 2026-11-24, no frame view reads `hud_cache`) and its statements |
 | `src/sqldoom/lakebase/` | Lakebase connections (OAuth) and one branch per game (`games.py`: create, warm, end, template refresh) |
 | `src/sqldoom/server/` | The app: routes (`app.py`), the frames rendered next to the database and pushed to the page (`frames.py`), the browser's Postgres relay, match rules, metrics |
 | `web/` | The page (`index.html`, `host.js`: menu, stats, scoreboard, rules) and the game itself in `web/game/` (canvas, input, render pool, Postgres wire protocol in the browser) |
@@ -76,18 +76,21 @@ The details, the steps the notebook automates and troubleshooting are in [docs/D
 
 ## Performance today
 
-Budget: 28.6 ms per tic (35 tics/s). Postgres 19 on Lakebase, 2026-11-20.
+Budget: 28.6 ms per tic (35 tics/s). Postgres 19 on Lakebase.
 
 | Measure | Result |
 | --- | --- |
-| Live game in the browser, single player, full detail | 35.1-35.7 frames/s, tic p50 14.3-14.6 ms |
-| Input to picture, live (key press to the first frame that shows it) | p50 111-115 ms, p90 131-133 ms |
-| Tic, E1M1 with combat, 22 monsters awake (24 CU) | p50 12.9 ms, p90 17.7 ms |
-| Tic, E1M9 with combat, 52 monsters awake (24 CU) | p50 21.2 ms, p90 26.1 ms |
-| Frame, full detail (server, 12 E1M9 poses, 24 CU) | 40.1 ms |
+| Live game in the browser, single player, full detail (2026-11-20) | 35.1-35.7 frames/s, tic p50 14.3-14.6 ms |
+| Live, a heavy E1M9 scene (2026-11-24, 16 CU) | 34.5 frames/s, 75 ms a frame with 3 render threads, tic p50 25.3 / p99 34.5 ms |
+| Input to picture, live (key press to the first frame that shows it, 2026-11-20) | p50 111-115 ms, p90 131-133 ms |
+| Tic, E1M1 with combat, 22 monsters awake (2026-11-20, 24 CU) | p50 12.9 ms, p90 17.7 ms |
+| Tic, E1M9 with combat, 52 monsters awake (2026-11-20, 24 CU) | p50 21.2 ms, p90 26.1 ms |
+| Tic, E1M9, 350 tics of combat, after the monster changes (2026-11-23, 16 CU) | p50 21.6 ms (28.8 before them, same run on 16 CU) |
+| Frame, full detail (server, 12 E1M9 poses, 2026-11-20, 24 CU) | 40.1 ms |
 | Frame, low detail (server, same poses) | 29.3 ms |
+| Frame, full detail, heaviest of 6-13 poses per map (2026-11-24, 16 CU, rendered alone) | 52-60 ms |
 
-The heaviest fights on the big maps can still go past the budget (E1M9 with combat: p99 31-36 ms). Details and the full history of fixes: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+The heaviest fights on the big maps can still go past the budget (E1M9 with combat: p99 31-36 ms): three frames and the 35 Hz tic run side by side on the same compute, and a frame is one Postgres process, so idle cores do not shorten it. Details and the full history of fixes: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Validation method
 

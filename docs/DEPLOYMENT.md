@@ -77,7 +77,7 @@ wad.load(conn, "/Volumes/<catalog>/<schema>/wad/DOOM1.WAD")   # definitions, WAD
 conn.close()
 ```
 
-`db.install` runs the migrations (`0001_baseline.sql`: 24 types, 116 tables) and creates the 134 functions, 26 views and materialized views and the indexes, in one transaction. `wad.load` then loads the game's definitions (`sql/seed/`), the WAD's palettes, textures, sprites, sounds, music and maps, the derived data, and creates the 180 per-map, per-seat frame views. About 30 s; the loader fills an empty schema only. From a terminal: `PYTHONPATH=src python -m sqldoom.wad <DOOM1.WAD> --endpoint <endpoint>` does both.
+`db.install` runs the migrations (`0001_baseline.sql`: 24 types, 116 tables, then `0002` to `0011`) and creates the game's functions, views and materialized views (139 and 30 at the 2026-11-23 install) and the indexes, in one transaction. `wad.load` then loads the game's definitions (`sql/seed/`), the WAD's palettes, textures, sprites, sounds, music and maps, the derived data, and creates the 180 per-map, per-seat frame views. About 30 s; the loader fills an empty schema only. From a terminal: `PYTHONPATH=src python -m sqldoom.wad <DOOM1.WAD> --endpoint <endpoint>` does both.
 
 ## 7. The template branch (after the app: do step 8 first)
 
@@ -188,7 +188,7 @@ Lakebase's rules shape the rest: a branch with an expiry cannot have children, s
 | `DOOM_GAME_TTL_S` | `21600` | Expiry set on each game branch, as a safety net |
 | `DOOM_RENDER_CONNS` | `4` | Render threads per player at page load (1 to 4; the page's auto mode adjusts it) |
 | `DOOM_MAX_FPS` | `35` | Frame request cap |
-| `DOOM_HUD_INTERVAL_MS` | `100` | Status-bar cache check interval, 0 = off |
+| `DOOM_HUD_INTERVAL_MS` | `0` | Status-bar cache writer's check interval, 0 = off. Off since 2026-11-24: no frame view reads `hud_cache`, the frames draw the status bar themselves (taking it from the cache measured 0.5 ms of a 55 ms frame) |
 | `DOOM_VACUUM_INTERVAL` | `1050` | Plain VACUUM of the game tables every n tics (~30 s), 0 = off |
 | `DOOM_LOADING_MIN_S` | `3` | Loading screen between two maps lasts at least this long |
 | `DOOM_LOADING_VACUUM_FULL` | `1` | VACUUM FULL behind the loading screen (0: plain VACUUM) |
@@ -207,5 +207,6 @@ Lakebase's rules shape the rest: a branch with an expiry cannot have children, s
 | `frame views missing on this branch` | The maps were loaded without the frame views (step 5): `SELECT doom.create_frame_views()` on `game-template` as `doom_owner` |
 | `No module named sqldoom` at the app's start | The Git source code path is not the repository root, or `app.yaml` lost its `PYTHONPATH=src` |
 | All browsers share one player | The relay sets `doom.player` per tab; check that the page is served by this app |
-| Tic over budget on big maps | Expected in big fights on E1M6/E1M9 (120-180 monsters); see `docs/PERFORMANCE.md`. Auto frames in flight then gives frames back |
+| Tic over budget on big maps | Can happen in the heaviest fights on E1M6/E1M9 (120-180 monsters), where three frames and the tic share the 16 CU branch (a live heavy E1M9 scene: tic p50 25.3, p99 34.5 ms); see `docs/PERFORMANCE.md`. Auto frames in flight then gives frames back |
+| A solo game starts on another skill or with respawns | The default rules of a new game come from `doom.mp_rules` on `game-template`, which the template refresh copies from `production`: single player Hurt me plenty, no monster or item respawn since 2026-11-25 (the same as `sql/seed/rules.sql`) |
 | Monsters respawn although respawn is off | On Nightmare, Doom always respawns monsters (12 s or more after death, at random); with the rule on, they come back exactly the set time after death, as items |

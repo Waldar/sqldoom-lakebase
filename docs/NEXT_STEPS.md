@@ -1,4 +1,4 @@
-# Next steps (planned 2026-11-18; status 2026-11-20)
+# Next steps (planned 2026-11-18; status 2026-11-26)
 
 ## Status
 
@@ -25,6 +25,18 @@ Also done since (2026-11-20):
 * Single player keeps health, armor, backpack, ammo, weapons and cheats from one level to the next (its exit only; keys and power-ups go, as Doom's `G_PlayerFinishLevel`; migration `0006`).
 * Quick save / quick load (F6 / F9, one save per player) on Lakebase branches (`docs/DEPLOYMENT.md`, "Quick save and quick load").
 * Single player's screens between levels (2026-11-21, migration `0009`): Doom's map order (E1M3's secret exit to E1M9, E1M9 back to E1M4, E1M8 ends the episode), the intermission (stats counting up with Doom's timings and sounds, then the episode map with splats and the blinking arrow) with `D_INTER`, and the end of Episode 1 (the text typed over `FLOOR4_8`, then `HELP2`) with `D_VICTOR`, then back to the lobby. SQL: `doom_solo_level_end`, `doom_solo_screen_tic`, the view `api_screen_frame` (drawn by the app's frame threads while the referee runs the screens). Deathmatch keeps its rotation and frag table.
+
+Also done since (2026-11-22 to 11-25):
+
+* The intermission's episode map moves as Doom's `wi_stuff.c` (`1789b11`, migration `0010`), and its frames are back to 12-14 ms (`89bda5a`).
+* Monsters as Doom's `A_Chase`, `A_Look`, `P_CheckSight` and `P_CheckMissileRange` (`e39d12e`, migration `0011`), from three owner reports: a shove stops when the body touches a wall, a ledge or a closed door, and a monster touching a line may step away (no more monsters stuck in walls or lifts); sight is narrowed by every opening's height (no shots through windows); missiles with Doom's timing and distance dice; a deaf monster that hears the player wakes only when it sees them; Doom's walking speeds (`monster_chase_defs`). E1M9 combat tic p50 28.8 -> 21.6 ms (16 CU).
+* Crossing another W1 line of the same tag after its door is open (the four around E1M6's red key) no longer replays the opening sound (`39f146e`).
+* A closing door goes back up for a monster whose body reaches under it from the next sector, not only for one whose centre is in it (`de331b4`).
+* Single player defaults: Hurt me plenty, no monster or item respawn (2026-11-25, `doom.mp_rules` on `production` and `game-template`; the seed already had them).
+* The repository's QR code on the page, first card of the right column (`94abd5c`).
+* Frame profile on Postgres 19, the status-bar cache writer off (`b24e285`) and the never-taken texel checks removed (`a5177bf`, about 1%): `docs/PERFORMANCE.md`, "Frame profile on Postgres 19".
+
+Considered and dropped (2026-11-24 to 11-26): DHTP high-resolution textures (they show only at 640x400 or more, an estimated 150-250 ms a frame); a no-shimmer frame view for frames without spectres (3 ms slower once the choice is made inside the view); a CPU for the tic, frames on read replicas (the lag made an older version unplayable); `REPACK (CONCURRENTLY)` instead of `VACUUM FULL` (little bloat in a game's branch, slower than plain `REPACK`). Measurements in `docs/PERFORMANCE.md`, "Tried and not kept".
 
 Dropped (owner, 2026-11-20):
 

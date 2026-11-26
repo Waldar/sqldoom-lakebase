@@ -40,7 +40,7 @@ s = Setup(project="<project id>", app="<app name>", wad="<volume path of DOOM1.W
 s.run(until="sql")
 ```
 
-Expected: one `[setup] --- <step>` line per step (project, compute, database, owner, maps, sql). During `maps`: `[db] migration 0001_baseline`, `[db] code ...: 134 functions, 26 views and materialized views, 0 frame views`, the loader's progress (`[wad-loader] [9/9] Loaded E1M9 ...`, `180 frame views created`), then `[setup] all done in ... s` (about 30 s on a new project). Normal lines that are not errors: `WARNING: 24 UI patches are not in this WAD` (the shareware WAD lacks episodes 2-3) and `Music will have no rendered audio (libfluidsynth not found)`.
+Expected: one `[setup] --- <step>` line per step (project, compute, database, owner, maps, sql). During `maps`: `[db] migration 0001_baseline` and one line per later migration up to `[db] migration 0011_monster_chase`, `[db] code ...: 139 functions, 30 views and materialized views, 0 frame views` (the counts of 2026-11-23; they grow with the code), the loader's progress (`[wad-loader] [9/9] Loaded E1M9 ...`, `180 frame views created`), then `[setup] all done in ... s` (about 30 s on a new project). Normal lines that are not errors: `WARNING: 24 UI patches are not in this WAD` (the shareware WAD lacks episodes 2-3) and `Music will have no rendered audio (libfluidsynth not found)`.
 
 ## 3. App part
 
