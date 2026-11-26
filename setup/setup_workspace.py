@@ -9,7 +9,8 @@ see setup_notebook.ipynb, or from a laptop signed in with `databricks auth login
     from setup_workspace import Setup
     s = Setup(project="sqldoom", app="sqldoom-ltap",
               wad="/Volumes/<catalog>/<schema>/wad/DOOM1.WAD")
-              # soundfont="/Volumes/.../TimGM6mb.sf2": the music's; default: next to the WAD
+              # soundfont="/Volumes/.../x.sf2": another soundfont for the music;
+              # default: TimGM6mb.sf2 next to the WAD, else the repository's own
     s.run()                 # every step below, in order
     s.run(until="sql")      # only the database part
 
@@ -25,11 +26,13 @@ Steps (Setup.STEPS):
               music is rendered as it loads when the soundfont is there
   music       the tracks the maps use that have no audio yet, rendered with
               the General MIDI soundfont (sqldoom.wad.midi), on the default
-              branch and on game-template if it exists. Needs the soundfont
-              (Setup(soundfont=...), default TimGM6mb.sf2 next to DOOM1.WAD)
-              and, without fluidsynth: pip install --no-deps tinysoundfont
-              and pip install soundfile (setup_notebook.ipynb does). Missing
-              either: says so and goes on, the game plays without music.
+              branch and on game-template if it exists. The soundfont ships
+              with the repository (assets/soundfont/TimGM6mb.sf2, GPL-2);
+              Setup(soundfont=...) or a TimGM6mb.sf2 next to DOOM1.WAD
+              overrides it. Without fluidsynth, the step pip installs
+              tinysoundfont (--no-deps), soundfile and numpy itself
+              (setup_notebook.ipynb already does). If rendering still cannot
+              run: says why and goes on, the game plays without music.
   sql         the game's SQL up to date (sqldoom.db.install; a no-op right
               after maps)
   app         the Databricks App with its Lakebase resource; its service
@@ -45,10 +48,8 @@ Steps (Setup.STEPS):
   config      app.yaml points at this project
   shrink      the default branch's primary back to 1 CU (lobby only)
 
-Not done here: uploading DOOM1.WAD to a volume (it cannot ship with the code)
-and the soundfont next to it (TimGM6mb.sf2, GPL-2: Debian's package
-timgm6mb-soundfont, /usr/share/sounds/sf2/TimGM6mb.sf2 in it),
-deploying the app (Setup.deploy(), or the app page: Deploy), giving players
+Not done here: uploading DOOM1.WAD to a volume (it cannot ship with the code;
+the music's soundfont does, in assets/soundfont/), deploying the app (Setup.deploy(), or the app page: Deploy), giving players
 Can use on the app.
 """
 import re
@@ -79,7 +80,8 @@ class Setup:
         self.project_id = project
         self.project = f"projects/{project}"
         self.app_name, self.wad, self.maps = app, wad, tuple(maps)
-        # the music's General MIDI soundfont: given, or TimGM6mb.sf2 next to the WAD
+        # the music's General MIDI soundfont: given, or TimGM6mb.sf2 next to the WAD;
+        # neither: sqldoom.wad.midi uses the repository's own (assets/soundfont/)
         if not soundfont and wad and (Path(wad).parent / "TimGM6mb.sf2").is_file():
             soundfont = str(Path(wad).parent / "TimGM6mb.sf2")
         self.soundfont = soundfont
@@ -223,12 +225,14 @@ class Setup:
 
     def step_music(self):
         from sqldoom.wad import midi
+        midi.ensure_packages(log)
         why = midi.unavailable_reason()
         if why:
-            log(f"music not rendered: {why}. The game plays without music; to add it, upload a General "
-                f"MIDI soundfont (TimGM6mb.sf2) next to the WAD or pass Setup(soundfont=...), "
-                f"pip install --no-deps tinysoundfont && pip install soundfile, and run step music")
+            log(f"music not rendered: {why}. The game plays without music; fix that and run "
+                f"s.run(['music']) (the soundfont is the repository's assets/soundfont/TimGM6mb.sf2 "
+                f"unless Setup(soundfont=...) names another)")
             return
+        log(f"music: soundfont {midi.soundfont()}")
         for endpoint, where in self._music_endpoints():
             conn = self.connect(role=self.role, endpoint=endpoint)
             conn.autocommit = False

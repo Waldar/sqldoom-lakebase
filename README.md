@@ -62,8 +62,8 @@ To deploy in another workspace with an assistant, ask Genie Code:
 By hand:
 
 1. Clone `https://github.com/Waldar/sqldoom-lakebase.git` as a Git folder. This repository is public; no access to the original private monorepo is needed.
-2. Upload `DOOM1.WAD` to a Unity Catalog volume.
-3. Open [`setup/setup_notebook`](setup/setup_notebook.ipynb), set its widgets (project, app, WAD path, and optionally the music's soundfont) and run it on serverless compute. It creates the Lakebase project, installs the tables and the game's SQL, loads the maps, renders the music, creates the app and `game-template`, and can deploy it.
+2. Upload `DOOM1.WAD` to a Unity Catalog volume. That is the only file to bring: the music's General MIDI soundfont ships with the repository (`assets/soundfont/TimGM6mb.sf2`, GPL-2 like the code, `TimGM6mb.copyright` next to it).
+3. Open [`setup/setup_notebook`](setup/setup_notebook.ipynb), set its widgets (project, app, WAD path) and run it on serverless compute. It creates the Lakebase project, installs the tables and the game's SQL, loads the maps, renders the music, creates the app and `game-template`, and can deploy it.
 4. Give players Can use on the app.
 
 The app deploys from the **repository root** (`app.yaml` is there and runs the package in `src/`). For Git-based App deployment, select branch `main` and leave the source code path empty.

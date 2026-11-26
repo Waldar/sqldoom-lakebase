@@ -3,8 +3,9 @@
     pip install --no-deps tinysoundfont && pip install soundfile numpy
     # (--no-deps: its pyaudio dependency, for live playback only, needs
     #  PortAudio to build; the x86 Linux wheel of tinysoundfont itself is prebuilt)
-    PYTHONPATH=src DOOM_SOUNDFONT=/Volumes/<catalog>/<schema>/<volume>/TimGM6mb.sf2 \
-        python tools/render_music.py --endpoint projects/sqldoom/branches/game-template/endpoints/primary
+    PYTHONPATH=src python tools/render_music.py --endpoint projects/sqldoom/branches/game-template/endpoints/primary
+    # the soundfont is the repository's assets/soundfont/TimGM6mb.sf2;
+    # DOOM_SOUNDFONT=/path/to/other.sf2 picks another one
 
 The WAD loader renders the tracks itself when it can (sqldoom.wad.midi);
 this is for a branch loaded without a renderer (music_assets.audio_data

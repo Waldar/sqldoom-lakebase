@@ -11,15 +11,25 @@ Two ways, the first that is installed wins (as LBDoom's midi_render.py,
   PortAudio).
 
 Either needs a General MIDI soundfont: DOOM_SOUNDFONT names one (for
-example a .sf2 in a Unity Catalog volume next to DOOM1.WAD), or one of the
-system paths below. tools/render_music.py renders a branch's tracks.
+example a .sf2 in a Unity Catalog volume next to DOOM1.WAD), else the
+repository's own TimGM6mb.sf2 (assets/soundfont/, GPL-2 like this code, see
+TimGM6mb.copyright there; bundled 2026-11-26 so that a deployment only needs
+the WAD), else one of the system paths below. ensure_packages() installs the
+pip packages when neither way is there. tools/render_music.py renders a
+branch's tracks.
 """
 import ctypes
+import importlib
 import io
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+from pathlib import Path
+
+# src/sqldoom/wad/midi.py -> the repository's root
+BUNDLED_SOUNDFONT = Path(__file__).resolve().parents[3] / "assets" / "soundfont" / "TimGM6mb.sf2"
 
 # Ubuntu/Debian ship these with fluidsynth's runtime; the first that exists
 # wins. TimGM6mb is the smaller of the two and quite close to the FM-ish
@@ -79,10 +89,28 @@ def _load_library():
 
 
 def soundfont():
-    for path in (os.getenv("DOOM_SOUNDFONT"), *SOUNDFONTS):
+    for path in (os.getenv("DOOM_SOUNDFONT"), str(BUNDLED_SOUNDFONT), *SOUNDFONTS):
         if path and os.path.isfile(path):
             return path
     return None
+
+
+def ensure_packages(log=print):
+    """Without fluidsynth and ffmpeg, pip install what the tinysoundfont way
+    needs into this Python (tinysoundfont with --no-deps: its pyaudio
+    dependency, for live playback only, needs PortAudio to build). True when
+    a way to render is there afterwards."""
+    if _fluidsynth() is not None or _pip_modules() is not None:
+        return True
+    log("music: installing tinysoundfont, soundfile and numpy with pip ...")
+    for args in (["soundfile", "numpy"], ["--no-deps", "tinysoundfont"]):
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", *args],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            log(f"music: pip install {' '.join(args)} failed: {(r.stderr or r.stdout).strip()[-300:]}")
+            return False
+    importlib.invalidate_caches()
+    return _pip_modules() is not None
 
 
 def _pip_modules():
