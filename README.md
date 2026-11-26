@@ -49,7 +49,7 @@ browser tab  --HTTPS/WebSocket-->  Databricks App (FastAPI, sqldoom.server.app)
 | `app.yaml`, `pyproject.toml`, `requirements.txt` | The Databricks App's command and settings, the Python package |
 | `setup/` | A new workspace: `setup_notebook.ipynb` and `setup_workspace.py` (idempotent steps, `Setup.status()` checks them), `doom_owner.sql`, and `DEPLOY_WITH_GENIE.md`, the runbook for an assistant |
 | `tools/` | `bench.py` (tic and frame latency), `mb_harness.py` (replays on scratch branches with game-state hashing, used for the tic work), `frame_compare.py` (a changed frame-view template against the installed one on a scratch branch: identical bytes, timings), `make_low_detail.py` (regenerates the low-detail frame view; `--check` fails when it is stale), `render_music.py` (renders the music with a soundfont), `cedar2plpgsql.py` (the port's translator, not used any more) |
-| `docs/` | `DEPLOYMENT.md` (step by step, troubleshooting), `PERFORMANCE.md` (the optimisations, with measurements), `NEXT_STEPS.md` (the plan of 2026-11-18 and its progress) |
+| `docs/` | `DEPLOYMENT.md` (step by step, troubleshooting), `PERFORMANCE.md` (the optimisations, with measurements), `CHANGELOG.md` (what shipped, with its commits, from the plan of 2026-11-18 on), `ROADMAP.md` (what is open, and the ideas measured and dropped) |
 
 ## Quick start
 

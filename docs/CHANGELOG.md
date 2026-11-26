@@ -1,13 +1,15 @@
-# Next steps (planned 2026-11-18; status 2026-11-26)
+# Changelog
 
-## Status
+What shipped, with its commits, from the plan of 2026-11-18 on (this file was `docs/NEXT_STEPS.md` until 2026-11-26). What is still open, and the ideas measured and dropped, are in [ROADMAP.md](ROADMAP.md); the measurements behind the changes are in [PERFORMANCE.md](PERFORMANCE.md).
+
+## Status of the plan of 2026-11-18
 
 Every step of the plan below has shipped, and both ideas of section 5:
 
 * **0. Frames in flight:** shipped (`1843bd3`, growth rule fixed the next day); with step 3 the rule moved to the app's render threads.
 * **1. Cheat codes:** shipped (`aab9a36`): `api_cheat_key`, single player only, through the relay's allow-list.
 * **2. Music:** shipped (`dcb57bc`), with audio: `src/sqldoom/wad/midi.py` renders with `tinysoundfont` and the TimGM6mb soundfont next to the WAD, as a setup step (`music`) or `tools/render_music.py`; the Music box became a volume slider (`34301a1`).
-* **3. Frames rendered in the app:** shipped (`src/sqldoom/server/frames.py`; details in section 3), frames started on each tic, the camera read from `player_state`. Input on the same socket: measured first, then dropped (below).
+* **3. Frames rendered in the app:** shipped (`src/sqldoom/server/frames.py`; details in section 3), frames started on each tic, the camera read from `player_state`. Input on the same socket: measured first, then dropped ([ROADMAP.md](ROADMAP.md)).
 * **4. Low detail:** generated from the full-detail template by `tools/make_low_detail.py` (`--check` fails when stale); 17-28% faster than full detail (`docs/PERFORMANCE.md`).
 * **5. Ideas:** the "I'M A SHAMELESS CHEATER" list in single player, and "Always run" (on by default, Shift walks).
 
@@ -36,17 +38,11 @@ Also done since (2026-11-22 to 11-25):
 * The repository's QR code on the page, first card of the right column (`94abd5c`).
 * Frame profile on Postgres 19, the status-bar cache writer off (`b24e285`) and the never-taken texel checks removed (`a5177bf`, about 1%): `docs/PERFORMANCE.md`, "Frame profile on Postgres 19".
 
-Considered and dropped (2026-11-24 to 11-26): DHTP high-resolution textures (they show only at 640x400 or more, an estimated 150-250 ms a frame); a no-shimmer frame view for frames without spectres (3 ms slower once the choice is made inside the view); a CPU for the tic, frames on read replicas (the lag made an older version unplayable); `REPACK (CONCURRENTLY)` instead of `VACUUM FULL` (little bloat in a game's branch, slower than plain `REPACK`). Measurements in `docs/PERFORMANCE.md`, "Tried and not kept".
+Also done since (2026-11-26):
 
-Dropped (owner, 2026-11-20):
+* The music's General MIDI soundfont ships with the repository (`assets/soundfont/TimGM6mb.sf2`, GPL-2), and the setup's music step installs its renderer itself: a deployment only needs `DOOM1.WAD` (2026-11-26, `493875e`).
 
-* Input on the frame socket (step 3): the input's way in is about 14 ms of the 113 ms, the same network trip on either socket, and the database write stays; it would save about 1 ms.
-* Doom's approximate sound distance (`P_AproxDistance`). (`D_INTER` came back with the intermission, 2026-11-21.)
-
-Open:
-
-* Delete `projects/sqldoom` once Postgres 19 has run for a few days.
-* Input to picture with low detail on: the frame is about half of it, low detail should take 15-20 ms off (not measured yet).
+## The plan of 2026-11-18
 
 The plan as written on 2026-11-18 follows, with the progress notes added while it was done.
 
