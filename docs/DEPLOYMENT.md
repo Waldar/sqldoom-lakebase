@@ -77,7 +77,7 @@ wad.load(conn, "/Volumes/<catalog>/<schema>/wad/DOOM1.WAD")   # definitions, WAD
 conn.close()
 ```
 
-`db.install` runs the migrations (`0001_baseline.sql`: 24 types, 116 tables, then `0002` to `0011`) and creates the game's functions, views and materialized views (139 and 30 at the 2026-11-23 install) and the indexes, in one transaction. `wad.load` then loads the game's definitions (`sql/seed/`), the WAD's palettes, textures, sprites, sounds, music and maps, the derived data, and creates the 180 per-map, per-seat frame views. About 30 s; the loader fills an empty schema only. From a terminal: `PYTHONPATH=src python -m sqldoom.wad <DOOM1.WAD> --endpoint <endpoint>` does both.
+`db.install` runs the migrations (`0001_baseline.sql`: 24 types, 116 tables, then `0002` to `0012`) and creates the game's functions, views and materialized views (139 and 30 at the 2026-11-23 install) and the indexes, in one transaction. `wad.load` then loads the game's definitions (`sql/seed/`), the WAD's palettes, textures, sprites, sounds, music and maps, the derived data, and creates the 180 per-map, per-seat frame views. About 30 s; the loader fills an empty schema only. From a terminal: `PYTHONPATH=src python -m sqldoom.wad <DOOM1.WAD> --endpoint <endpoint>` does both.
 
 ## 7. The template branch (after the app: do step 8 first)
 

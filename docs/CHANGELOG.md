@@ -44,8 +44,12 @@ Also done since (2026-11-26):
 
 Also done since (2026-11-27):
 
-* IDBEHOLD as Doom's `ST_Responder` (migration `0012`): "idbehold" alone prints "inVuln, Str, Inviso, Rad, Allmap, or Lite-amp" and waits for the letter; typing a power-up's code again turns it off (the timed ones end on the next tic, berserk at once; the computer map stays, as in Doom); every one prints "Power-up Toggled"; berserk tints the screen red, fading over about 22 s (`player_state.berserk_tics`, Doom's `powers[pw_strength]` counter).
-* The player's rockets, plasma and BFG aim as Doom's `P_SpawnPlayerMissile`: the hitscan's `P_AimLineAttack` over 1,024 units, straight ahead then 5.6 degrees either side, so a wall or a closed door hides a target and the openings on the way bound the slope; no target, a level shot. Until then the nearest monster in a cone set the slope through walls (rockets dove into the floor at E1M9's blue door). E1M9, monster behind the closed blue door: vertical speed -3.6 -> 0; door open: -6.62 (aimed at it).
+* `docs/NEXT_STEPS.md` split into this file and [ROADMAP.md](ROADMAP.md) (`ee0b38c`).
+* IDBEHOLD as Doom's `ST_Responder` (`e7fc501`, migration `0012`): "idbehold" alone prints "inVuln, Str, Inviso, Rad, Allmap, or Lite-amp" and waits for the letter; typing a power-up's code again turns it off (the timed ones end on the next tic, berserk at once; the computer map stays, as in Doom); every one prints "Power-up Toggled"; berserk tints the screen red, fading over about 22 s (`player_state.berserk_tics`, Doom's `powers[pw_strength]` counter).
+* The player's rockets, plasma and BFG aim as Doom's `P_SpawnPlayerMissile`: the hitscan's `P_AimLineAttack` over 1,024 units, straight ahead then 5.6 degrees either side, so a wall or a closed door hides a target and the openings on the way bound the slope; no target, a level shot. Until then the nearest monster in a cone set the slope through walls (rockets dove into the floor at E1M9's blue door). E1M9, monster behind the closed blue door: vertical speed -3.6 -> 0; door open: -6.62 (aimed at it) (`53b6f86`).
+* The cheat list no longer says "(idspispopd too)" under idclip; the code still works (`ca84fdc`).
+
+All of 2026-11-27 deployed at 15:54 UTC (`53b6f86`).
 
 ## The plan of 2026-11-18
 

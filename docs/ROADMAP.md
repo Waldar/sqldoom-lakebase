@@ -6,6 +6,8 @@ What is still open, and the ideas measured or weighed and dropped, so they are n
 
 * Delete `projects/sqldoom` (the old Postgres 17 project, kept as the rollback) once Postgres 19 has run for a few days.
 * Input to picture with low detail on: the frame is about half of it, low detail should take 15-20 ms off (not measured yet).
+* Cheats on Nightmare: Doom's `ST_Responder` turns them off on Nightmare (all but IDCLEV); this game keeps them on. Not decided.
+* Cheat letters are read by key position (`ev.code`), so on an AZERTY keyboard the codes with A, Q, Z, W or M (IDDQD, IDKFA, IDFA, IDBEHOLDA, IDMYPOS) come out wrong; reading the typed letter (`ev.key`) would fix it. Not done.
 
 ## Considered and dropped
 
