@@ -380,6 +380,24 @@ class Setup:
         self.w.permissions.update("database-projects", self.project_id, access_control_list=[
             AccessControlRequest(service_principal_name=sp, permission_level=PermissionLevel.CAN_MANAGE)])
         log(f"service principal {sp}: member of {self.role}, Can manage on {self.project}")
+        self.set_thumbnail()
+
+    def set_thumbnail(self, path=REPO / "assets" / "app_thumbnail.png"):
+        """The app's picture on the Apps page, from the repository
+        (assets/app_thumbnail.png): PATCH /api/2.0/apps/<name>/thumbnail, run by
+        the app step and by deploy(). A deploy from the app page or from Git
+        does not run it: then s.set_thumbnail() once."""
+        import base64
+        path = Path(path)
+        if not path.is_file():
+            log(f"no {path.name}: the app keeps its thumbnail")
+            return
+        try:
+            self.w.api_client.do("PATCH", f"/api/2.0/apps/{self.app_name}/thumbnail", body={
+                "app_thumbnail": {"thumbnail": base64.b64encode(path.read_bytes()).decode()}})
+            log(f"app thumbnail set from {path.name}")
+        except Exception as exc:          # a picture is not worth failing the setup for
+            log(f"app thumbnail not set: {exc}")
 
     def step_config(self):
         """app.yaml: the lobby endpoint, and the project when it is not projects/sqldoom."""
@@ -522,4 +540,5 @@ class Setup:
         log(f"deploying {path}")
         d = self.w.apps.deploy(app_name=self.app_name, app_deployment=A.AppDeployment(source_code_path=path)).result()
         log(f"deployment {d.deployment_id}: {d.status.state} {d.status.message}")
+        self.set_thumbnail()
         return d
