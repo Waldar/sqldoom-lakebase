@@ -2154,6 +2154,7 @@ player_ui_state AS (
          ps.ammo_bullets, ps.ammo_shells, ps.ammo_rockets, ps.ammo_cells,
          ps.key_blue,ps.key_yellow,ps.key_red,
          ps.damage_count, ps.bonus_count, ps.radsuit_tics,
+         ps.berserk, ps.berserk_tics,
          ps.message, ps.message_tics, ps.backpack,
          wd.ammo_type AS current_ammo_type
   FROM me_state ps
@@ -2171,10 +2172,11 @@ active_palette AS (
   --   else                palette = 0
   -- with STARTREDPALS 1, NUMREDPALS 8, STARTBONUSPALS 9, NUMBONUSPALS 4 and
   -- RADIATIONPAL 13. The & 8 is what makes the radiation suit's green blink
-  -- as it runs out.
+  -- as it runs out. cnt is the damage count, or berserk's 12 - (strength
+  -- >> 6) when that is more (2026-11-27: berserk had no red tint).
   SELECT CASE
-    WHEN pu.damage_count > 0
-      THEN LEAST(7, (pu.damage_count + 7) / 8) + 1
+    WHEN GREATEST(pu.damage_count, CASE WHEN pu.berserk THEN 12 - (pu.berserk_tics >> 6) ELSE 0 END) > 0
+      THEN LEAST(7, (GREATEST(pu.damage_count, CASE WHEN pu.berserk THEN 12 - (pu.berserk_tics >> 6) ELSE 0 END) + 7) / 8) + 1
     WHEN pu.bonus_count > 0
       THEN LEAST(3, (pu.bonus_count + 7) / 8) + 9
     WHEN pu.radsuit_tics > 128 OR (pu.radsuit_tics & 8) <> 0

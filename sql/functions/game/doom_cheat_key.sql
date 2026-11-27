@@ -28,6 +28,9 @@ FOR _r2 IN SELECT CASE
        AND RIGHT(_cs.buf,1) BETWEEN '1' AND '9'
     THEN 'music:E' || SUBSTRING(_cs.buf FROM LENGTH(_cs.buf)-1 FOR 1) || 'M' || RIGHT(_cs.buf,1)
   WHEN RIGHT(_cs.buf,4) = 'IDDT' THEN 'iddt'
+  -- ST_Responder's cheat_powerup[6]: "idbehold" alone prints STSTR_BEHOLD
+  -- and waits for the letter (2026-11-27; it printed nothing)
+  WHEN RIGHT(_cs.buf,8) = 'IDBEHOLD' THEN 'prompt:inVuln, Str, Inviso, Rad, Allmap, or Lite-amp'
   ELSE COALESCE((
     SELECT 'code:' || c.code
     FROM (VALUES ('IDSPISPOPD'),('IDCHOPPERS'),('IDBEHOLDV'),('IDBEHOLDS'),
@@ -41,6 +44,10 @@ IF _cs.result LIKE 'code:%' THEN
   code := SUBSTRING(_cs.result FROM 6);
   msg := doom_cheat(doom_cheat_key.p_map_id, doom_cheat_key.p_player_thing_id, _cs.code);
   result := 'msg:' || _cs.msg;
+END IF;
+-- the prompt keeps the buffer: the next letter completes the code
+IF _cs.result LIKE 'prompt:%' THEN
+  RETURN 'msg:' || SUBSTRING(_cs.result FROM 8);
 END IF;
 IF _cs.result <> 'none' THEN
   UPDATE screen_state SET cheat_buffer='' WHERE id=0;

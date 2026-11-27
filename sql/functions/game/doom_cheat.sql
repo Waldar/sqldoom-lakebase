@@ -52,35 +52,43 @@ IF _cs.code = 'IDKFA' THEN
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
   message := 'Very Happy Ammo Added';
 END IF;
+-- IDBEHOLDx toggles, as ST_Responder (2026-11-27; until then it always gave
+-- the power and printed its name): without the power, P_GivePower; with a
+-- timed one, the counter goes to 1 so it ends on the next tic; berserk goes
+-- off at once; the computer map stays (Doom sets its power to 1, which never
+-- counts down). Doom's message for all of them: STSTR_BEHOLDX.
 IF _cs.code = 'IDBEHOLDV' THEN
-  UPDATE player_state SET invuln_tics=1050
+  UPDATE player_state SET invuln_tics=CASE WHEN invuln_tics > 0 THEN 1 ELSE 1050 END
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
-  message := 'Invulnerability';
+  message := 'Power-up Toggled';
 END IF;
 IF _cs.code = 'IDBEHOLDS' THEN
-  UPDATE player_state SET berserk=TRUE, health=GREATEST(health,100)
+  -- P_GivePower(pw_strength): P_GiveBody(100), the counter at 1 (red tint)
+  UPDATE player_state SET health=CASE WHEN berserk THEN health ELSE GREATEST(health,100) END,
+                          berserk_tics=CASE WHEN berserk THEN 0 ELSE 1 END,
+                          berserk=NOT berserk
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
-  message := 'Berserk';
+  message := 'Power-up Toggled';
 END IF;
 IF _cs.code = 'IDBEHOLDI' THEN
-  UPDATE player_state SET invis_tics=2100
+  UPDATE player_state SET invis_tics=CASE WHEN invis_tics > 0 THEN 1 ELSE 2100 END
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
-  message := 'Partial Invisibility';
+  message := 'Power-up Toggled';
 END IF;
 IF _cs.code = 'IDBEHOLDR' THEN
-  UPDATE player_state SET radsuit_tics=2100
+  UPDATE player_state SET radsuit_tics=CASE WHEN radsuit_tics > 0 THEN 1 ELSE 2100 END
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
-  message := 'Radiation Suit';
+  message := 'Power-up Toggled';
 END IF;
 IF _cs.code = 'IDBEHOLDA' THEN
   UPDATE player_state SET power_map=TRUE
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
-  message := 'Computer Area Map';
+  message := 'Power-up Toggled';
 END IF;
 IF _cs.code = 'IDBEHOLDL' THEN
-  UPDATE player_state SET light_amp_tics=4200
+  UPDATE player_state SET light_amp_tics=CASE WHEN light_amp_tics > 0 THEN 1 ELSE 4200 END
   WHERE map_id=doom_cheat.p_map_id::int AND player_thing_id=doom_cheat.p_player_thing_id::int;
-  message := 'Light Amplification Visor';
+  message := 'Power-up Toggled';
 END IF;
 IF _cs.code = 'IDCHOPPERS' THEN
   INSERT INTO player_weapon_owned (map_id, player_thing_id, weapon_id)

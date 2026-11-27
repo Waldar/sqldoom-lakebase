@@ -42,6 +42,10 @@ Also done since (2026-11-26):
 
 * The music's General MIDI soundfont ships with the repository (`assets/soundfont/TimGM6mb.sf2`, GPL-2), and the setup's music step installs its renderer itself: a deployment only needs `DOOM1.WAD` (2026-11-26, `493875e`).
 
+Also done since (2026-11-27):
+
+* IDBEHOLD as Doom's `ST_Responder` (migration `0012`): "idbehold" alone prints "inVuln, Str, Inviso, Rad, Allmap, or Lite-amp" and waits for the letter; typing a power-up's code again turns it off (the timed ones end on the next tic, berserk at once; the computer map stays, as in Doom); every one prints "Power-up Toggled"; berserk tints the screen red, fading over about 22 s (`player_state.berserk_tics`, Doom's `powers[pw_strength]` counter).
+
 ## The plan of 2026-11-18
 
 The plan as written on 2026-11-18 follows, with the progress notes added while it was done.
