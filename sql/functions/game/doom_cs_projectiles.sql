@@ -15,6 +15,9 @@ DECLARE
   spawn_ahead double precision;
   nightmare_missile_speed double precision;
   melee_reach double precision;
+  attack_z_offset double precision;
+  autoaim_slope double precision;
+  slope_unbounded double precision;
 BEGIN
 
 -- 10 constants in one scan (was 10 doom_const() calls)
@@ -31,6 +34,12 @@ SELECT
        COALESCE(max(value) FILTER (WHERE name = 'MELEE_REACH'), 0)
   INTO player_radius, player_height, view_height, missile_spawn_z, aim_spread, shadow_units, effect_id_base, spawn_ahead, nightmare_missile_speed, melee_reach
   FROM doom_constants WHERE name IN ('AIM_SPREAD_DEGREES', 'MELEE_REACH', 'MISSILE_SPAWN_AHEAD', 'MISSILE_SPAWN_Z', 'NIGHTMARE_MISSILE_SPEED', 'PLAYER_HEIGHT', 'PLAYER_RADIUS', 'PROJECTILE_EFFECT_ID_BASE', 'SHADOW_SPREAD_UNITS', 'VIEWHEIGHT');
+-- the player's missile autoaim, as the hitscan's (doom_cs_hitscan_fire)
+SELECT COALESCE(max(value) FILTER (WHERE name = 'ATTACK_Z_OFFSET'), 0),
+       COALESCE(max(value) FILTER (WHERE name = 'AUTOAIM_SLOPE'), 0),
+       COALESCE(max(value) FILTER (WHERE name = 'SLOPE_UNBOUNDED'), 0)
+  INTO attack_z_offset, autoaim_slope, slope_unbounded
+  FROM doom_constants WHERE name IN ('ATTACK_Z_OFFSET', 'AUTOAIM_SLOPE', 'SLOPE_UNBOUNDED');
 -- Advance every Doom missile.
 
 DELETE FROM projectile_damage WHERE map_id=doom_cs_projectiles.p_map_id;
@@ -152,36 +161,120 @@ source AS (
   LEFT JOIN render_things rt ON rt.map_id=t.map_id AND rt.thing_id=t.id
   WHERE pw.fired_this_tick
 ),
-targets AS (
-  SELECT s.*,mt.id AS target_id,mt.x::double precision AS tx,
-         mt.y::double precision AS ty,
-         (sec.floor_height+rt.thing_height/2.0)::double precision AS tz,
-         cd.radius::double precision AS radius
+-- P_SpawnPlayerMissile (2026-11-27): P_AimLineAttack over 16*64 units
+-- straight ahead, then 1<<26 (5.625 degrees) to the left, then to the right;
+-- the first ray that finds a target gives the missile its angle and its
+-- slope, none: straight ahead, level. The aim is the hitscan's
+-- (doom_cs_hitscan_fire): a wall or a closed door on the way hides a
+-- target, and every two-sided line narrows the vertical window. Until then
+-- the nearest live thing in a cone, through walls, at any distance, set
+-- the slope: rockets aimed at monsters behind E1M9's blue door went into
+-- the floor.
+shooter AS (
+  SELECT s.*, (s.sz - _cs.missile_spawn_z + _cs.player_height/2.0
+               + _cs.attack_z_offset)::double precision AS shoot_z
   FROM source s
-  JOIN thing_health h ON h.map_id=s.map_id AND h.alive
+),
+targets AS (
+  SELECT sh.player_thing_id AS shooter_id, mt.id AS thing_id,
+         mt.x::double precision AS x, mt.y::double precision AS y,
+         cd.radius::double precision AS radius,
+         sec.floor_height::double precision AS base_z,
+         rt.thing_height::double precision AS height
+  FROM shooter sh
+  JOIN thing_health h ON h.map_id=sh.map_id AND h.alive
   JOIN things mt ON mt.map_id=h.map_id AND mt.id=h.thing_id
   JOIN thing_combat_defs cd ON cd.thing_type=mt.type
   JOIN render_things rt ON rt.map_id=mt.map_id AND rt.thing_id=mt.id
   LEFT JOIN monster_ai ai ON ai.map_id=mt.map_id AND ai.thing_id=mt.id
   JOIN sectors sec ON sec.map_id=mt.map_id
     AND sec.id=COALESCE(ai.sector_id,rt.sector_id)
+  UNION ALL
+  -- the other players of a deathmatch
+  SELECT sh.player_thing_id, ps.player_thing_id, t.x::double precision, t.y::double precision,
+         _cs.player_radius::double precision,
+         (ps.base_z - _cs.view_height)::double precision,
+         _cs.player_height::double precision
+  FROM shooter sh
+  JOIN player_state ps ON ps.map_id = sh.map_id
+   AND ps.player_thing_id <> sh.player_thing_id AND ps.alive
+  JOIN things t ON t.map_id = ps.map_id AND t.id = ps.player_thing_id
 ),
-target_geometry AS (
-  SELECT t.*,
-         (t.tx-t.sx)*COS(t.angle)+(t.ty-t.sy)*SIN(t.angle) AS along,
-         -(t.tx-t.sx)*SIN(t.angle)+(t.ty-t.sy)*COS(t.angle) AS lateral_offset
-  FROM targets t
+map_lines AS (
+  SELECT ld.x1::double precision AS x1, ld.y1::double precision AS y1,
+         ld.x2::double precision AS x2, ld.y2::double precision AS y2,
+         ld.fsec AS right_sector, ld.bsec AS left_sector,
+         GREATEST(rsec.floor_height, lsec.floor_height)::double precision AS open_bottom,
+         LEAST(rsec.ceil_height, lsec.ceil_height)::double precision AS open_top,
+         rsec.floor_height<>lsec.floor_height AS floors_differ,
+         rsec.ceil_height<>lsec.ceil_height AS ceils_differ
+  FROM params p
+  JOIN linedef_geom ld ON ld.map_id = p.map_id
+  LEFT JOIN sectors rsec ON rsec.map_id = ld.map_id AND rsec.id = ld.fsec
+  LEFT JOIN sectors lsec ON lsec.map_id = ld.map_id AND lsec.id = ld.bsec
+  WHERE EXISTS (SELECT 1 FROM shooter)
 ),
-ranked_targets AS (
-  SELECT g.*,ROW_NUMBER() OVER (PARTITION BY map_id,player_thing_id
-    ORDER BY ABS(lateral_offset)/NULLIF(along,0),along,target_id) AS rn
-  FROM target_geometry g
-  WHERE along>0 AND ABS(lateral_offset)<=radius+along*TAN(RADIANS(_cs.aim_spread))
+aim_rays(priority, angle) AS (
+  SELECT 0, 0.0::double precision
+  UNION ALL SELECT 1, RADIANS(_cs.aim_spread)
+  UNION ALL SELECT 2, RADIANS(-_cs.aim_spread)
+),
+aim_hits AS (
+  SELECT sh.player_thing_id, a.priority, a.angle, t.*,
+         g.along - SQRT(GREATEST(0.0, t.radius*t.radius - g.perp2)) AS distance
+  FROM shooter sh
+  CROSS JOIN aim_rays a
+  JOIN targets t ON t.shooter_id = sh.player_thing_id
+  CROSS JOIN LATERAL (
+    SELECT (t.x-sh.sx)*COS(sh.angle+a.angle) + (t.y-sh.sy)*SIN(sh.angle+a.angle) AS along,
+           POWER(-(t.x-sh.sx)*SIN(sh.angle+a.angle) + (t.y-sh.sy)*COS(sh.angle+a.angle), 2) AS perp2
+  ) g
+  WHERE g.along > 0 AND g.along <= 1024 + t.radius AND g.perp2 <= t.radius*t.radius
+),
+aim_window AS (
+  SELECT h.*, sh.shoot_z,
+         COALESCE(w.solid,FALSE) AS solid,
+         GREATEST(-_cs.autoaim_slope, COALESCE(w.max_bottom, -_cs.slope_unbounded)) AS bslope,
+         LEAST(_cs.autoaim_slope, COALESCE(w.min_top, _cs.slope_unbounded)) AS tslope
+  FROM aim_hits h
+  JOIN shooter sh ON sh.player_thing_id = h.player_thing_id
+  CROSS JOIN LATERAL (
+    SELECT
+      MAX(CASE WHEN l.right_sector IS NULL OR l.left_sector IS NULL
+                 OR l.open_bottom>=l.open_top THEN 1 ELSE 0 END)=1 AS solid,
+      MAX(CASE WHEN l.floors_differ THEN (l.open_bottom-sh.shoot_z)/q.ray_t END) AS max_bottom,
+      MIN(CASE WHEN l.ceils_differ THEN (l.open_top-sh.shoot_z)/q.ray_t END) AS min_top
+    FROM map_lines l
+    CROSS JOIN LATERAL (
+      SELECT
+        ((l.x1-sh.sx)*(l.y2-l.y1) - (l.y1-sh.sy)*(l.x2-l.x1))
+          / NULLIF(COS(sh.angle+h.angle)*(l.y2-l.y1) - SIN(sh.angle+h.angle)*(l.x2-l.x1), 0.0) AS ray_t,
+        ((l.x1-sh.sx)*SIN(sh.angle+h.angle) - (l.y1-sh.sy)*COS(sh.angle+h.angle))
+          / NULLIF(COS(sh.angle+h.angle)*(l.y2-l.y1) - SIN(sh.angle+h.angle)*(l.x2-l.x1), 0.0) AS line_u
+    ) q
+    WHERE q.ray_t > 0 AND q.ray_t < h.distance AND q.line_u BETWEEN 0 AND 1
+  ) w
+  WHERE h.distance > 0 AND h.distance <= 1024
+),
+visible_aim AS (
+  SELECT w.player_thing_id, w.priority, w.angle, w.distance, w.thing_id,
+         (LEAST(b.thing_top,w.tslope) + GREATEST(b.thing_bot,w.bslope)) / 2.0 AS aimslope
+  FROM aim_window w
+  CROSS JOIN LATERAL (
+    SELECT (w.base_z+w.height-w.shoot_z)/w.distance AS thing_top,
+           (w.base_z-w.shoot_z)/w.distance AS thing_bot
+  ) b
+  WHERE NOT w.solid AND w.tslope > w.bslope
+    AND b.thing_top >= w.bslope AND b.thing_bot <= w.tslope
 ),
 aimed AS (
-  SELECT s.*,r.tz,r.along
-  FROM source s LEFT JOIN ranked_targets r
-    ON r.map_id=s.map_id AND r.player_thing_id=s.player_thing_id AND r.rn=1
+  SELECT s.*, COALESCE(v.angle, 0.0) AS aim_angle, COALESCE(v.aimslope, 0.0) AS slope
+  FROM source s
+  LEFT JOIN LATERAL (
+    SELECT va.angle, va.aimslope FROM visible_aim va
+    WHERE va.player_thing_id = s.player_thing_id
+    ORDER BY va.priority, va.distance, va.thing_id LIMIT 1
+  ) v ON TRUE
 ),
 numbered AS (
   SELECT a.*,COALESCE((SELECT MAX(projectile_id)
@@ -193,8 +286,8 @@ INSERT INTO monster_projectiles
   (map_id,projectile_id,owner_thing_id,projectile_type,x,y,z,vx,vy,vz,
    sector_id,state,age,damage,impact_player)
 SELECT map_id,projectile_id,player_thing_id,projectile_type,sx,sy,sz,
-       speed*COS(angle),speed*SIN(angle),
-       speed*COALESCE((tz-sz)/NULLIF(along,0),0.0),
+       speed*COS(angle+aim_angle),speed*SIN(angle+aim_angle),
+       speed*slope,
        sector_id,'fly',0,damage::smallint,FALSE
 FROM numbered;
 
